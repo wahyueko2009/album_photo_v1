@@ -1,4 +1,4 @@
-import { useState, useRef, DragEvent, ChangeEvent, useEffect } from 'react';
+import React, { useState, useRef, DragEvent, ChangeEvent, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Camera, 
@@ -25,7 +25,10 @@ import {
   Grid,
   Share2,
   Copy,
-  X
+  X,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw
 } from 'lucide-react';
 import { ImageItem, AlbumTheme, AlbumTransition, AlbumConfig } from './types';
 import { compileAlbumHTML, chunkImages } from './utils/compiler';
@@ -57,6 +60,16 @@ export default function App() {
   // Preview State
   const [previewPage, setPreviewPage] = useState<number>(0); // 0 = Cover, 1+ = Page Numbers
   const [lightboxImage, setLightboxImage] = useState<ImageItem | null>(null);
+  const [zoomScale, setZoomScale] = useState<number>(1);
+  const [panOffset, setPanOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    setZoomScale(1);
+    setPanOffset({ x: 0, y: 0 });
+    setIsPanning(false);
+  }, [lightboxImage]);
 
   // Sharing State
   const [isSharing, setIsSharing] = useState<boolean>(false);
@@ -427,6 +440,61 @@ export default function App() {
     }
   };
 
+  // Lightbox Interactive Zoom and Pan Helpers
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    if (e.deltaY < 0) {
+      setZoomScale(prev => Math.min(prev + 0.25, 4));
+    } else {
+      setZoomScale(prev => {
+        const next = Math.max(prev - 0.25, 1);
+        if (next === 1) setPanOffset({ x: 0, y: 0 });
+        return next;
+      });
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (zoomScale > 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning && zoomScale > 1) {
+      e.preventDefault();
+      setPanOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y
+      });
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsPanning(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (zoomScale > 1 && e.touches.length === 1) {
+      setIsPanning(true);
+      setPanStart({
+        x: e.touches[0].clientX - panOffset.x,
+        y: e.touches[0].clientY - panOffset.y
+      });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isPanning && zoomScale > 1 && e.touches.length === 1) {
+      setPanOffset({
+        x: e.touches[0].clientX - panStart.x,
+        y: e.touches[0].clientY - panStart.y
+      });
+    }
+  };
+
   const themeStyles = getThemeStyles();
   const currentCoverImage = images.find(img => img.id === coverImageId) || images[0];
 
@@ -441,8 +509,8 @@ export default function App() {
               <Camera className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-base font-extrabold tracking-tight text-slate-900">
-                KameraAlbum
+              <h1 className="text-xl font-bold tracking-normal text-slate-900 lowercase leading-none" style={{ fontFamily: "'Dancing Script', cursive" }}>
+                album kenangan
               </h1>
               <p className="text-[11px] text-slate-400 font-medium">Generator Album Foto Offline-First</p>
             </div>
@@ -792,6 +860,15 @@ export default function App() {
                   style={{ backgroundColor: themeStyles.bg }}
                   className={`flex-1 rounded-[26px] overflow-hidden relative flex flex-col transition-all duration-300 select-none ${themeStyles.font}`}
                 >
+                  {/* Floating Watermark matching compiled HTML output */}
+                  {images.length > 0 && (
+                    <div 
+                      style={{ fontFamily: "'Dancing Script', cursive", color: themeStyles.accent }}
+                      className="absolute top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold opacity-60 z-30 pointer-events-none whitespace-nowrap lowercase"
+                    >
+                      album kenangan
+                    </div>
+                  )}
                   {images.length === 0 ? (
                     /* EMPTY LIVE PREVIEW STATE */
                     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-slate-400">
@@ -1131,29 +1208,113 @@ export default function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setLightboxImage(null)}
-            className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-6 cursor-zoom-out"
+            className="fixed inset-0 bg-black/95 z-50 flex flex-col items-center justify-center p-4 md:p-6"
           >
+            {/* Top Close Button */}
             <button 
               onClick={() => setLightboxImage(null)}
-              className="absolute top-5 right-5 text-white/80 hover:text-white bg-white/10 p-2 rounded-full cursor-pointer transition-colors"
+              className="absolute top-5 right-5 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-2.5 rounded-full cursor-pointer transition-all z-50 shadow-lg"
+              title="Tutup Pratinjau"
             >
-              <Minimize2 className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
 
-            <motion.img 
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              src={lightboxImage.compressedBase64} 
-              alt={lightboxImage.name} 
-              className="max-w-full max-h-[85%] object-contain rounded-lg shadow-2xl"
-            />
+            {/* Inner Interactive Image Container */}
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUpOrLeave}
+              onMouseLeave={handleMouseUpOrLeave}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleMouseUpOrLeave}
+              className={`relative overflow-hidden flex items-center justify-center max-w-full max-h-[75vh] md:max-h-[80vh] rounded-lg select-none transition-shadow ${
+                zoomScale > 1 ? 'cursor-grab active:cursor-grabbing' : 'cursor-zoom-in'
+              }`}
+            >
+              <motion.img 
+                initial={{ scale: 0.95 }}
+                animate={{ 
+                  scale: zoomScale,
+                  x: panOffset.x,
+                  y: panOffset.y,
+                }}
+                transition={isPanning ? { type: 'just' } : { type: 'spring', damping: 25, stiffness: 200 }}
+                src={lightboxImage.compressedBase64} 
+                alt={lightboxImage.name} 
+                className="max-w-full max-h-[75vh] md:max-h-[80vh] object-contain rounded-md shadow-2xl origin-center pointer-events-none"
+                style={{ imageRendering: 'auto' }}
+              />
+            </div>
 
+            {/* Caption */}
             {lightboxImage.caption && (
-              <p className="text-slate-300 text-xs mt-4 italic max-w-sm text-center leading-relaxed font-medium">
+              <p className="text-slate-300 text-xs mt-3 italic max-w-sm text-center leading-relaxed font-medium bg-black/40 px-3 py-1.5 rounded-lg backdrop-blur-xs select-none">
                 {lightboxImage.caption}
               </p>
             )}
+
+            {/* Elegant Floating Zoom Control Bar */}
+            <div 
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 bg-black/60 backdrop-blur-md px-4 py-2.5 rounded-2xl border border-white/10 shadow-2xl z-50 text-white min-w-[280px]"
+            >
+              <div className="flex items-center justify-between w-full gap-4">
+                <button
+                  onClick={() => {
+                    setZoomScale(prev => {
+                      const next = Math.max(prev - 0.25, 1);
+                      if (next === 1) setPanOffset({ x: 0, y: 0 });
+                      return next;
+                    });
+                  }}
+                  disabled={zoomScale <= 1}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                  title="Perkecil"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+
+                <div className="flex flex-col items-center select-none shrink-0">
+                  <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest leading-none">Skala</span>
+                  <span className="text-xs font-bold font-mono mt-0.5">{Math.round(zoomScale * 100)}%</span>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setZoomScale(prev => Math.min(prev + 0.25, 4));
+                  }}
+                  disabled={zoomScale >= 4}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer"
+                  title="Perbesar"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+
+                <div className="h-4 w-[1px] bg-white/15" />
+
+                <button
+                  onClick={() => {
+                    setZoomScale(1);
+                    setPanOffset({ x: 0, y: 0 });
+                  }}
+                  disabled={zoomScale === 1 && panOffset.x === 0 && panOffset.y === 0}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer flex items-center gap-1 text-[10px] font-bold"
+                  title="Atur Ulang"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>100%</span>
+                </button>
+              </div>
+
+              <p className="text-[9px] text-slate-400 text-center font-medium leading-none mt-1">
+                {zoomScale > 1 
+                  ? 'Geser gambar untuk melihat detail' 
+                  : 'Gunakan tombol, scroll mouse, atau cubit untuk memperbesar'}
+              </p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1263,7 +1424,7 @@ export default function App() {
       {/* MINIMAL FOOTER BAR */}
       <footer className="bg-white border-t border-slate-100 py-6 text-center text-[11px] text-slate-400 mt-auto px-4" id="app-footer">
         <p className="max-w-xl mx-auto leading-relaxed">
-          KameraAlbum memproses data 100% lokal di browser Anda. Foto tidak pernah diunggah ke jaringan internet manapun untuk menjaga privasi mutlak.
+          album kenangan memproses data 100% lokal di browser Anda. Foto tidak pernah diunggah ke jaringan internet manapun untuk menjaga privasi mutlak.
         </p>
       </footer>
       <OfflineIndicator />

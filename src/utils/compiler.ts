@@ -178,7 +178,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       <div class="album-page" id="page-${pageNum}">
         <div class="page-inner">
           <div class="page-header">
-            <span class="page-badge">Bagian ${pageNum}</span>
+            <span class="page-badge">Halaman ${pageNum}</span>
           </div>
           <div class="page-content">
             ${gridLayout}
@@ -196,6 +196,9 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>${config.title} - Album Foto</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600;700&family=Playball&display=swap" rel="stylesheet">
   <style>
     /* BASE CSS & RESET */
     * {
@@ -703,7 +706,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
 
     @media (max-width: 768px) {
       #slideshow-panel {
-        bottom: 95px !important; /* Diangkat tinggi sekali agar sangat aman dari semua tombol navigasi HP */
+        bottom: 75px !important; /* Diangkat tinggi agar aman dari tombol navigasi HP dan bullet */
         left: 50% !important;
         right: auto !important;
         transform: translateX(-50%) !important;
@@ -712,7 +715,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
         box-shadow: 0 10px 25px rgba(0,0,0,0.2) !important;
       }
       #indicators-wrapper {
-        bottom: 200px !important; /* Digeser lebih ke atas agar berada di atas panel kontrol */
+        bottom: 25px !important; /* Letak bullet penunjuk halaman berada di bawah, tidak menimpa foto */
       }
     }
 
@@ -768,58 +771,177 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       pointer-events: auto;
     }
 
+    #lightbox-img-wrapper {
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      max-width: 100%;
+      max-height: 75vh;
+      border-radius: 8px;
+      cursor: zoom-in;
+    }
+
     #lightbox-img {
       max-width: 100%;
-      max-height: 80%;
+      max-height: 75vh;
       object-fit: contain;
       border-radius: 6px;
       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-      transform: scale(0.95);
-      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transform-origin: center center;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
     }
 
-    #lightbox.active #lightbox-img {
-      transform: scale(1);
+    #lightbox-img-wrapper.zoomed {
+      cursor: grab;
+    }
+
+    #lightbox-img-wrapper.zoomed:active {
+      cursor: grabbing;
     }
 
     #lightbox-caption {
-      color: #9ca3af;
-      font-size: 0.9rem;
+      color: #e5e7eb;
+      font-size: 0.85rem;
       text-align: center;
-      margin-top: 16px;
+      margin-top: 12px;
       font-style: italic;
       max-width: 500px;
+      background-color: rgba(0, 0, 0, 0.4);
+      padding: 6px 12px;
+      border-radius: 8px;
+      pointer-events: none;
     }
 
     .lightbox-close {
       position: absolute;
       top: 20px;
       right: 20px;
-      background: none;
+      background: rgba(255, 255, 255, 0.1);
       border: none;
       color: white;
-      font-size: 2rem;
+      font-size: 1.5rem;
       cursor: pointer;
       line-height: 1;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       opacity: 0.8;
-      transition: opacity 0.2s;
+      transition: all 0.2s;
+      z-index: 120;
     }
 
     .lightbox-close:hover {
       opacity: 1;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    #lightbox-zoom-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background-color: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 10px 18px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      margin-top: 16px;
+      color: white;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      z-index: 110;
+      min-width: 280px;
+      justify-content: space-between;
+    }
+
+    .zoom-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .zoom-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .zoom-btn:disabled {
+      opacity: 0.3;
+      pointer-events: none;
+    }
+
+    .zoom-pct-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 50px;
+    }
+
+    .zoom-label {
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: #9ca3af;
+      margin-bottom: 2px;
+    }
+
+    #lightbox-zoom-pct {
+      font-size: 11px;
+      font-weight: bold;
+      font-family: monospace;
+    }
+
+    .zoom-bar-divider {
+      width: 1px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .zoom-reset-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: none;
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .zoom-reset-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .zoom-reset-btn:disabled {
+      opacity: 0.3;
+      pointer-events: none;
     }
 
     /* WATERMARK FOOTER */
     .watermark {
       position: absolute;
-      top: 20px;
+      top: 15px;
       left: 50%;
       transform: translateX(-50%);
-      font-size: 0.65rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      opacity: 0.35;
-      font-weight: 700;
+      font-family: 'Dancing Script', 'Playball', cursive;
+      font-size: 1.4rem;
+      opacity: 0.6;
       pointer-events: none;
       z-index: 5;
     }
@@ -839,7 +961,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
 </head>
 <body>
 
-  <div class="watermark">KameraAlbum</div>
+  <div class="watermark">album kenangan</div>
 
   <div id="album-wrapper">
     <div id="slides-container">
@@ -919,10 +1041,24 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
   </div>
 
   <!-- LIGHTBOX -->
-  <div id="lightbox" onclick="closeLightbox()">
+  <div id="lightbox" onclick="handleLightboxBackdropClick(event)">
     <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
-    <img id="lightbox-img" src="" alt="Fullscreen preview" />
+    <div id="lightbox-img-wrapper" onclick="event.stopPropagation()">
+      <img id="lightbox-img" src="" alt="Fullscreen preview" />
+    </div>
     <div id="lightbox-caption"></div>
+    
+    <!-- Floating Zoom Controls -->
+    <div id="lightbox-zoom-bar" onclick="event.stopPropagation()">
+      <button class="zoom-btn" onclick="zoomLightbox(-0.25)">&minus;</button>
+      <div class="zoom-pct-container">
+        <span class="zoom-label">SKALA</span>
+        <span id="lightbox-zoom-pct">100%</span>
+      </div>
+      <button class="zoom-btn" onclick="zoomLightbox(0.25)">&plus;</button>
+      <div class="zoom-bar-divider"></div>
+      <button class="zoom-reset-btn" onclick="resetLightboxZoom()">100%</button>
+    </div>
   </div>
 
   <script>
@@ -1049,7 +1185,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
         pagesHTML += '<div class="album-page" id="page-' + pageNum + '">' +
           '<div class="page-inner">' +
             '<div class="page-header">' +
-              '<span class="page-badge">Bagian ' + pageNum + '</span>' +
+              '<span class="page-badge">Halaman ' + pageNum + '</span>' +
             '</div>' +
             '<div class="page-content">' +
               gridLayout +
@@ -1172,17 +1308,17 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
         if (photoRow) photoRow.style.display = 'flex';
         if (speedRow) speedRow.style.display = autoplayEnabled ? 'flex' : 'none';
         
-        // Adjust indicators higher because panel is taller
+        // Keep indicators safe at the bottom on mobile
         if (indicators && window.innerWidth <= 768) {
-          indicators.style.bottom = autoplayEnabled ? '220px' : '185px';
+          indicators.style.bottom = '25px';
         }
       } else {
         if (photoRow) photoRow.style.display = 'none';
         if (speedRow) speedRow.style.display = 'none';
         
-        // Lower indicators because panel is ultra compact
+        // Keep indicators safe at the bottom on mobile
         if (indicators && window.innerWidth <= 768) {
-          indicators.style.bottom = '145px';
+          indicators.style.bottom = '25px';
         }
       }
     }
@@ -1314,7 +1450,12 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       }
     });
 
-    // Lightbox
+    // Lightbox Interactive Zoom & Pan State
+    let zoomScale = 1;
+    let panOffset = { x: 0, y: 0 };
+    let isPanning = false;
+    let panStart = { x: 0, y: 0 };
+
     function openLightbox(photoId) {
       const photo = photos[photoId];
       if (!photo) return;
@@ -1328,6 +1469,9 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       lightboxImg.src = photo.base64;
       lightboxCaption.textContent = photo.caption || '';
 
+      // Reset zoom/pan on open
+      resetLightboxZoom();
+
       lightbox.classList.add('active');
     }
 
@@ -1339,6 +1483,131 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
         startAutoplay();
       }
     }
+
+    function handleLightboxBackdropClick(e) {
+      if (e.target.id === 'lightbox') {
+        closeLightbox();
+      }
+    }
+
+    function updateLightboxTransform() {
+      const img = document.getElementById('lightbox-img');
+      const wrapper = document.getElementById('lightbox-img-wrapper');
+      const pctSpan = document.getElementById('lightbox-zoom-pct');
+      const resetBtn = document.querySelector('.zoom-reset-btn');
+      
+      if (!img || !wrapper || !pctSpan || !resetBtn) return;
+
+      img.style.transform = "scale(" + zoomScale + ") translate(" + (panOffset.x / zoomScale) + "px, " + (panOffset.y / zoomScale) + "px)";
+      pctSpan.textContent = Math.round(zoomScale * 100) + '%';
+      
+      if (zoomScale > 1) {
+        wrapper.classList.add('zoomed');
+        resetBtn.removeAttribute('disabled');
+      } else {
+        wrapper.classList.remove('zoomed');
+        resetBtn.setAttribute('disabled', 'true');
+      }
+
+      // Update control button disabled states
+      const decBtns = document.querySelectorAll('.zoom-btn');
+      if (decBtns.length >= 2) {
+        if (zoomScale <= 1) {
+          decBtns[0].setAttribute('disabled', 'true');
+        } else {
+          decBtns[0].removeAttribute('disabled');
+        }
+        if (zoomScale >= 4) {
+          decBtns[1].setAttribute('disabled', 'true');
+        } else {
+          decBtns[1].removeAttribute('disabled');
+        }
+      }
+    }
+
+    function zoomLightbox(delta) {
+      zoomScale = Math.max(1, Math.min(4, zoomScale + delta));
+      if (zoomScale === 1) {
+        panOffset = { x: 0, y: 0 };
+      }
+      updateLightboxTransform();
+    }
+
+    function resetLightboxZoom() {
+      zoomScale = 1;
+      panOffset = { x: 0, y: 0 };
+      updateLightboxTransform();
+    }
+
+    // Attach drag and wheel gesture events on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      const wrapper = document.getElementById('lightbox-img-wrapper');
+      if (!wrapper) return;
+
+      // Wheel Zoom
+      wrapper.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY < 0 ? 0.25 : -0.25;
+        zoomScale = Math.max(1, Math.min(4, zoomScale + delta));
+        if (zoomScale === 1) {
+          panOffset = { x: 0, y: 0 };
+        }
+        updateLightboxTransform();
+      }, { passive: false });
+
+      // Mouse drag start
+      wrapper.addEventListener('mousedown', (e) => {
+        if (zoomScale > 1) {
+          e.preventDefault();
+          isPanning = true;
+          panStart = { x: e.clientX - panOffset.x, y: e.clientY - panOffset.y };
+        }
+      });
+
+      // Mouse drag move
+      window.addEventListener('mousemove', (e) => {
+        if (isPanning && zoomScale > 1) {
+          panOffset = {
+            x: e.clientX - panStart.x,
+            y: e.clientY - panStart.y
+          };
+          updateLightboxTransform();
+        }
+      });
+
+      // Mouse drag stop
+      window.addEventListener('mouseup', () => {
+        isPanning = false;
+      });
+
+      // Touch drag start
+      wrapper.addEventListener('touchstart', (e) => {
+        if (zoomScale > 1 && e.touches.length === 1) {
+          isPanning = true;
+          panStart = {
+            x: e.touches[0].clientX - panOffset.x,
+            y: e.touches[0].clientY - panOffset.y
+          };
+        }
+      });
+
+      // Touch drag move
+      wrapper.addEventListener('touchmove', (e) => {
+        if (isPanning && zoomScale > 1 && e.touches.length === 1) {
+          e.preventDefault();
+          panOffset = {
+            x: e.touches[0].clientX - panStart.x,
+            y: e.touches[0].clientY - panStart.y
+          };
+          updateLightboxTransform();
+        }
+      }, { passive: false });
+
+      // Touch drag stop
+      wrapper.addEventListener('touchend', () => {
+        isPanning = false;
+      });
+    });
 
     // Dynamic Initialization of UI settings on page load
     setPhotosPerPage(photosPerPage);

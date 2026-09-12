@@ -54,7 +54,7 @@ export const PWAInstallButton: React.FC = () => {
                   <Smartphone size={24} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">Install KameraAlbum di iPhone</h3>
+                  <h3 className="text-sm font-extrabold text-slate-900">Install album kenangan di iPhone</h3>
                   <p className="text-[10px] text-slate-400">Jadikan aplikasi mandiri tanpa browser</p>
                 </div>
               </div>
@@ -75,7 +75,7 @@ export const PWAInstallButton: React.FC = () => {
                 <div className="flex gap-2.5 items-start">
                   <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-[10px] font-black text-slate-800 mt-0.5 shrink-0">3</span>
                   <span>
-                    Buka ikon <strong>KameraAlbum</strong> di halaman utama HP Anda untuk menikmati performa layar penuh yang cepat dan offline-first!
+                    Buka ikon <strong>album kenangan</strong> di halaman utama HP Anda untuk menikmati performa layar penuh yang cepat dan offline-first!
                   </span>
                 </div>
               </div>
