@@ -177,13 +177,9 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       <!-- PAGE ${pageNum} -->
       <div class="album-page" id="page-${pageNum}">
         <div class="page-inner">
-          <div class="page-header">
-            <span class="page-badge">Halaman ${pageNum}</span>
-          </div>
           <div class="page-content">
             ${gridLayout}
           </div>
-          ${config.showPageNumbers ? `<div class="page-footer">Halaman ${pageNum} dari ${totalPages}</div>` : ''}
         </div>
       </div>
     `;
@@ -250,8 +246,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       opacity: 0;
       visibility: hidden;
       transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease-in-out;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
+      overflow: hidden;
       padding: 16px;
     }
 
@@ -335,13 +330,14 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
     /* PAGES STRUCTURE */
     .page-inner {
       width: 100%;
-      max-width: 480px; /* Perfect portrait smartphone size */
+      max-width: 560px; /* Diperlebar agar sangat proporsional di layar HP 6-8 inci, layar lipat, dan tablet */
       height: 100%;
-      max-height: 800px;
+      max-height: 85vh; /* Menyesuaikan tinggi layar secara adaptif */
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       gap: 12px;
+      overflow: hidden;
     }
 
     .page-header {
@@ -416,6 +412,26 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       overflow: hidden;
       border-radius: 4px; /* Inner photo corners */
       background-color: transparent;
+    }
+
+    /* Layout specific max-height limits to prevent viewport vertical overflow */
+    .single-image-layout .image-container {
+      max-height: 55vh;
+    }
+    .grid-2-portrait .image-container {
+      max-height: 45vh;
+    }
+    .grid-2-stacked .image-container {
+      max-height: 32vh;
+    }
+    .grid-3-bento .bento-main .image-container {
+      max-height: 38vh;
+    }
+    .grid-3-bento .bento-sub .image-container {
+      max-height: 18vh;
+    }
+    .grid-4-quad .image-container {
+      max-height: 22vh;
     }
 
     /* Aspect Ratio Utilities for standalone compiled HTML */
@@ -716,6 +732,16 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       }
       #indicators-wrapper {
         bottom: 25px !important; /* Letak bullet penunjuk halaman berada di bawah, tidak menimpa foto */
+        max-width: 92vw !important;
+      }
+      .dots-container {
+        gap: 5px !important;
+        padding: 5px 10px !important;
+        border-radius: 16px !important;
+      }
+      .dot {
+        width: 5px !important;
+        height: 5px !important;
       }
     }
 
@@ -730,6 +756,14 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       border-radius: 20px;
       pointer-events: auto;
       box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      max-width: 90vw;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none; /* Hide scrollbar Firefox */
+    }
+
+    .dots-container::-webkit-scrollbar {
+      display: none; /* Hide scrollbar Webkit */
     }
 
     .dot {
@@ -740,6 +774,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       opacity: 0.25;
       transition: opacity 0.3s, transform 0.3s;
       cursor: pointer;
+      flex-shrink: 0;
     }
 
     .dot.active {
@@ -940,8 +975,10 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       left: 50%;
       transform: translateX(-50%);
       font-family: 'Dancing Script', 'Playball', cursive;
-      font-size: 1.4rem;
-      opacity: 0.6;
+      font-size: 1.5rem;
+      font-weight: 800 !important;
+      color: ${config.theme === 'dark' ? '#ffffff' : '#000000'} !important;
+      opacity: 0.95 !important;
       pointer-events: none;
       z-index: 5;
     }
@@ -1184,13 +1221,9 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
 
         pagesHTML += '<div class="album-page" id="page-' + pageNum + '">' +
           '<div class="page-inner">' +
-            '<div class="page-header">' +
-              '<span class="page-badge">Halaman ' + pageNum + '</span>' +
-            '</div>' +
             '<div class="page-content">' +
               gridLayout +
             '</div>' +
-            (initialConfig.showPageNumbers ? '<div class="page-footer">Halaman ' + pageNum + ' dari ' + pages.length + '</div>' : '') +
           '</div>' +
         '</div>';
       });
@@ -1236,6 +1269,9 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       dots.forEach((dot, i) => {
         if (i === currentSlide) {
           dot.classList.add('active');
+          if (typeof dot.scrollIntoView === 'function') {
+            dot.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+          }
         } else {
           dot.classList.remove('active');
         }

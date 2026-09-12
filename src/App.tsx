@@ -44,7 +44,7 @@ export default function App() {
   const [subtitle, setSubtitle] = useState<string>('Kumpulan kenangan indah diabadikan bersama');
   const [theme, setTheme] = useState<AlbumTheme>('vintage');
   const [transition, setTransition] = useState<AlbumTransition>('slide');
-  const [showPageNumbers, setShowPageNumbers] = useState<boolean>(true);
+  const [showPageNumbers, setShowPageNumbers] = useState<boolean>(false);
   const [coverImageId, setCoverImageId] = useState<string>('');
   const [autoplay, setAutoplay] = useState<boolean>(false);
   const [autoplayInterval, setAutoplayInterval] = useState<number>(5);
@@ -863,8 +863,8 @@ export default function App() {
                   {/* Floating Watermark matching compiled HTML output */}
                   {images.length > 0 && (
                     <div 
-                      style={{ fontFamily: "'Dancing Script', cursive", color: themeStyles.accent }}
-                      className="absolute top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold opacity-60 z-30 pointer-events-none whitespace-nowrap lowercase"
+                      style={{ fontFamily: "'Dancing Script', cursive" }}
+                      className="absolute top-3.5 left-1/2 -translate-x-1/2 text-[15px] font-extrabold text-black dark:text-white opacity-95 z-30 pointer-events-none whitespace-nowrap lowercase"
                     >
                       album kenangan
                     </div>
@@ -915,11 +915,6 @@ export default function App() {
                           /* PAGES CONTENT PREVIEW */
                           <div className="w-full flex-1 flex flex-col justify-center gap-1.5">
                             
-                            {/* Inner Page Header */}
-                            <div className="flex justify-between items-center text-[7px] font-extrabold uppercase tracking-wider mb-0.5" style={{ color: themeStyles.accent }}>
-                              <span>Halaman {previewPage}</span>
-                            </div>
-
                             {/* Dynamically Styled Photo Grids inside phone screen */}
                             <div className="flex-1 flex flex-col justify-center min-h-0">
                               {(() => {
@@ -945,8 +940,8 @@ export default function App() {
                                         style={{ backgroundColor: themeStyles.cardBg }}
                                         className={`w-full rounded-md p-2 pb-3 border ${themeStyles.border} shadow-sm cursor-pointer transition-all duration-300 origin-center hover:rotate-0 hover:scale-[1.03] active:scale-[0.98]`}
                                       >
-                                        <div className={`${img.orientation === 'portrait' ? 'aspect-[3/4]' : 'aspect-[4/3]'} bg-slate-100/50 rounded-xs overflow-hidden relative`}>
-                                          <img src={img.compressedBase64} alt={img.name} className="w-full h-full object-contain" />
+                                        <div className={`${img.orientation === 'portrait' ? 'aspect-[3/4]' : 'aspect-[4/3]'} bg-slate-100/50 rounded-xs overflow-hidden relative`} style={{ maxHeight: '55vh' }}>
+                                          <img src={img.compressedBase64} alt={img.name} className="w-full h-full object-contain animate-fade-in" />
                                         </div>
                                         {img.caption && (
                                           <p className="text-[7px] mt-1.5 italic text-center font-semibold truncate px-1" style={{ color: themeStyles.text }}>
@@ -968,7 +963,7 @@ export default function App() {
                                             style={{ backgroundColor: themeStyles.cardBg }}
                                             className={`rounded-md p-1.5 pb-2.5 border ${themeStyles.border} shadow-sm cursor-pointer transition-all duration-300 origin-center ${getTiltClass(idx)} hover:rotate-0 hover:scale-[1.03] active:scale-[0.98]`}
                                           >
-                                            <div className="aspect-[3/4] bg-slate-100 rounded-xs overflow-hidden">
+                                            <div className="aspect-[3/4] bg-slate-100 rounded-xs overflow-hidden" style={{ maxHeight: '45vh' }}>
                                               <img src={img.compressedBase64} alt={img.name} className="w-full h-full object-contain" />
                                             </div>
                                             {img.caption && (
@@ -992,7 +987,7 @@ export default function App() {
                                               style={{ backgroundColor: themeStyles.cardBg }}
                                               className={`w-full rounded-md p-1.5 pb-2 border ${themeStyles.border} shadow-sm cursor-pointer transition-all duration-300 origin-center ${getTiltClass(idx)} hover:rotate-0 hover:scale-[1.03] active:scale-[0.98]`}
                                             >
-                                              <div className={`${aspect} bg-slate-100 rounded-xs overflow-hidden relative`}>
+                                              <div className={`${aspect} bg-slate-100 rounded-xs overflow-hidden relative`} style={{ maxHeight: '32vh' }}>
                                                 <img src={img.compressedBase64} alt={img.name} className="w-full h-full object-contain" />
                                               </div>
                                               {img.caption && (
@@ -1017,7 +1012,7 @@ export default function App() {
                                         style={{ backgroundColor: themeStyles.cardBg }}
                                         className={`w-full rounded-md p-1.5 pb-2 border ${themeStyles.border} shadow-sm cursor-pointer transition-all duration-300 origin-center ${getTiltClass(0)} hover:rotate-0 hover:scale-[1.03] active:scale-[0.98]`}
                                       >
-                                        <div className={`${firstAspect} bg-slate-100 rounded-xs overflow-hidden relative`}>
+                                        <div className={`${firstAspect} bg-slate-100 rounded-xs overflow-hidden relative`} style={{ maxHeight: '38vh' }}>
                                           <img src={firstImg.compressedBase64} alt={firstImg.name} className="w-full h-full object-contain" />
                                         </div>
                                         {firstImg.caption && (
@@ -1034,7 +1029,7 @@ export default function App() {
                                             style={{ backgroundColor: themeStyles.cardBg }}
                                             className={`rounded-md p-1.5 pb-2 border ${themeStyles.border} shadow-sm cursor-pointer transition-all duration-300 origin-center ${getTiltClass(idx + 1)} hover:rotate-0 hover:scale-[1.03] active:scale-[0.98]`}
                                           >
-                                            <div className="aspect-video bg-slate-100 rounded-xs overflow-hidden relative">
+                                            <div className="aspect-video bg-slate-100 rounded-xs overflow-hidden relative" style={{ maxHeight: '18vh' }}>
                                               <img src={img.compressedBase64} alt={img.name} className="w-full h-full object-contain" />
                                             </div>
                                             {img.caption && (
@@ -1059,7 +1054,7 @@ export default function App() {
                                             style={{ backgroundColor: themeStyles.cardBg }}
                                             className={`rounded-md p-1.5 pb-2 border ${themeStyles.border} shadow-sm cursor-pointer transition-all duration-300 origin-center ${getTiltClass(idx)} hover:rotate-0 hover:scale-[1.03] active:scale-[0.98]`}
                                           >
-                                            <div className={`${aspect} bg-slate-100 rounded-xs overflow-hidden relative`}>
+                                            <div className={`${aspect} bg-slate-100 rounded-xs overflow-hidden relative`} style={{ maxHeight: '22vh' }}>
                                               <img src={img.compressedBase64} alt={img.name} className="w-full h-full object-contain" />
                                             </div>
                                             {img.caption && (
@@ -1075,12 +1070,6 @@ export default function App() {
                                 }
                               })()}
                             </div>
-
-                            {showPageNumbers && (
-                              <div className="text-[7px] text-center mt-1 font-extrabold opacity-40" style={{ color: themeStyles.text }}>
-                                Halaman {previewPage} dari {totalPages}
-                              </div>
-                            )}
 
                           </div>
                         )}
