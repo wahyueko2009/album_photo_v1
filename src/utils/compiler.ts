@@ -271,7 +271,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
       color: ${hasCoverImage ? '#ffffff' : textClass};
       display: flex;
       flex-direction: column;
-      justify-content: flex-end;
+      justify-content: center;
       align-items: center;
       text-align: center;
       padding: 40px 24px;
@@ -279,7 +279,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
 
     .cover-content {
       max-width: 500px;
-      margin-bottom: 60px;
+      margin-bottom: 0px;
       animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
@@ -734,6 +734,9 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
         bottom: 25px !important; /* Letak bullet penunjuk halaman berada di bawah, tidak menimpa foto */
         max-width: 92vw !important;
       }
+      .watermark {
+        top: 32px !important;
+      }
       .dots-container {
         gap: 5px !important;
         padding: 5px 10px !important;
@@ -971,7 +974,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
     /* WATERMARK FOOTER */
     .watermark {
       position: absolute;
-      top: 15px;
+      top: 24px;
       left: 50%;
       transform: translateX(-50%);
       font-family: 'Dancing Script', 'Playball', cursive;

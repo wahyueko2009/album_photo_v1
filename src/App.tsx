@@ -864,7 +864,7 @@ export default function App() {
                   {images.length > 0 && (
                     <div 
                       style={{ fontFamily: "'Dancing Script', cursive" }}
-                      className="absolute top-3.5 left-1/2 -translate-x-1/2 text-[15px] font-extrabold text-black dark:text-white opacity-95 z-30 pointer-events-none whitespace-nowrap lowercase"
+                      className="absolute top-6 left-1/2 -translate-x-1/2 text-[15px] font-extrabold text-black dark:text-white opacity-95 z-30 pointer-events-none whitespace-nowrap lowercase"
                     >
                       album kenangan
                     </div>
@@ -893,7 +893,7 @@ export default function App() {
                               backgroundSize: 'cover',
                               backgroundPosition: 'center'
                             }}
-                            className={`absolute inset-0 flex flex-col justify-end p-4 text-center ${currentCoverImage ? 'text-white' : 'text-slate-800'}`}
+                            className={`absolute inset-0 flex flex-col justify-center p-4 text-center ${currentCoverImage ? 'text-white' : 'text-slate-800'}`}
                           >
                             <div className="mb-4">
                               <span className="text-[8px] uppercase tracking-wider font-extrabold opacity-75">Koleksi Album</span>
