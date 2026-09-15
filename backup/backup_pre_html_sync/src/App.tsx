@@ -41,8 +41,7 @@ import { AlbumKenanganLogo } from './components/AlbumKenanganLogo';
 import { 
   getSavedAlbums, 
   saveAlbumToPortal, 
-  deleteAlbumFromPortal,
-  fetchPortalAlbumsFromServer
+  deleteAlbumFromPortal 
 } from './utils/portalStorage';
 import { generateSampleAlbum } from './utils/sampleData';
 
@@ -534,15 +533,6 @@ export default function App() {
     }
   };
 
-  // Sync with server portal albums on mount and when navigating to portal
-  useEffect(() => {
-    fetchPortalAlbumsFromServer().then((list) => {
-      if (list && list.length > 0) {
-        setSavedAlbums(list);
-      }
-    });
-  }, [currentScreen]);
-
   const handleCopyLink = () => {
     if (shareUrl) {
       navigator.clipboard.writeText(shareUrl);
@@ -568,106 +558,49 @@ export default function App() {
     setCurrentScreen('editor');
   };
 
-  const handleSelectAlbum = async (album: SavedAlbum) => {
+  const handleSelectAlbum = (album: SavedAlbum) => {
     setCurrentAlbumId(album.id);
-    let albumImages = album.images || [];
-    let albumConfig = album.config || {
-      title: album.title || 'Album Kenangan',
-      subtitle: album.subtitle || '',
-      theme: 'vintage',
-      transition: 'slide',
-      showPageNumbers: false,
-      photosPerPage: 4,
-    };
-
-    // If album was created on another device (e.g. phone vs laptop), fetch full photos from server
-    if (albumImages.length === 0) {
-      try {
-        const res = await fetch(`/api/album/${album.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.images)) {
-            albumImages = data.images;
-            albumConfig = data.config || albumConfig;
-          }
-        }
-      } catch (e) {
-        console.warn('Gagal mengambil data foto lengkap dari server:', e);
-      }
-    }
-
-    setImages(albumImages);
-    setTitle(albumConfig.title || album.title || 'Album Kenangan');
-    setSubtitle(albumConfig.subtitle || album.subtitle || '');
-    setTheme(albumConfig.theme || 'vintage');
-    setTransition(albumConfig.transition || 'slide');
-    setShowPageNumbers(albumConfig.showPageNumbers || false);
-    setCoverImageId(albumConfig.coverImageId || '');
-    setPhotosPerPage(albumConfig.photosPerPage || 4);
-    setShareUrl(album.shareUrl || `${window.location.origin}/album/${album.id}`);
+    setImages(album.images || []);
+    setTitle(album.config?.title || album.title || 'Album Kenangan');
+    setSubtitle(album.config?.subtitle || album.subtitle || '');
+    setTheme(album.config?.theme || 'vintage');
+    setTransition(album.config?.transition || 'slide');
+    setShowPageNumbers(album.config?.showPageNumbers || false);
+    setCoverImageId(album.config?.coverImageId || '');
+    setPhotosPerPage(album.config?.photosPerPage || 4);
+    setShareUrl(album.shareUrl || null);
     setPreviewPage(0);
     setActiveTab('preview');
     setCurrentScreen('preview');
   };
 
-  const handleEditAlbum = async (album: SavedAlbum) => {
+  const handleEditAlbum = (album: SavedAlbum) => {
     setCurrentAlbumId(album.id);
-    let albumImages = album.images || [];
-    let albumConfig = album.config || {
-      title: album.title || 'Album Kenangan',
-      subtitle: album.subtitle || '',
-      theme: 'vintage',
-      transition: 'slide',
-      showPageNumbers: false,
-      photosPerPage: 4,
-    };
-
-    if (albumImages.length === 0) {
-      try {
-        const res = await fetch(`/api/album/${album.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.images)) {
-            albumImages = data.images;
-            albumConfig = data.config || albumConfig;
-          }
-        }
-      } catch (e) {
-        console.warn('Gagal mengambil data foto lengkap dari server:', e);
-      }
-    }
-
-    setImages(albumImages);
-    setTitle(albumConfig.title || album.title || 'Album Kenangan');
-    setSubtitle(albumConfig.subtitle || album.subtitle || '');
-    setTheme(albumConfig.theme || 'vintage');
-    setTransition(albumConfig.transition || 'slide');
-    setShowPageNumbers(albumConfig.showPageNumbers || false);
-    setCoverImageId(albumConfig.coverImageId || '');
-    setPhotosPerPage(albumConfig.photosPerPage || 4);
-    setShareUrl(album.shareUrl || `${window.location.origin}/album/${album.id}`);
+    setImages(album.images || []);
+    setTitle(album.config?.title || album.title || 'Album Kenangan');
+    setSubtitle(album.config?.subtitle || album.subtitle || '');
+    setTheme(album.config?.theme || 'vintage');
+    setTransition(album.config?.transition || 'slide');
+    setShowPageNumbers(album.config?.showPageNumbers || false);
+    setCoverImageId(album.config?.coverImageId || '');
+    setPhotosPerPage(album.config?.photosPerPage || 4);
+    setShareUrl(album.shareUrl || null);
     setActiveTab('configure');
     setCurrentScreen('editor');
   };
 
-  const handleDeleteAlbum = async (albumId: string) => {
+  const handleDeleteAlbum = (albumId: string) => {
     deleteAlbumFromPortal(albumId);
-    try {
-      await fetch(`/api/portal/albums/${albumId}`, { method: 'DELETE' });
-    } catch {
-      // ignore
-    }
-    const updated = await fetchPortalAlbumsFromServer();
-    setSavedAlbums(updated);
+    setSavedAlbums(getSavedAlbums());
   };
 
   const handleLoadSampleAlbum = () => {
     const sample = generateSampleAlbum();
     saveAlbumToPortal(sample);
-    fetchPortalAlbumsFromServer().then(list => setSavedAlbums(list));
+    setSavedAlbums(getSavedAlbums());
   };
 
-  const handleSaveCurrentAlbumToPortal = async () => {
+  const handleSaveCurrentAlbumToPortal = () => {
     if (images.length === 0) return null;
     const albumId = currentAlbumId || Math.random().toString(36).substring(2, 11);
     setCurrentAlbumId(albumId);
@@ -682,45 +615,18 @@ export default function App() {
       autoplayInterval,
       photosPerPage,
     };
-
-    // 1. Save to local storage for offline access
     const saved = saveAlbumToPortal({
       id: albumId,
       title,
       subtitle,
       images,
       config,
-      shareUrl: shareUrl || `${window.location.origin}/album/${albumId}`,
+      shareUrl: shareUrl || undefined,
     });
-
-    // 2. Automatically compile and save standalone HTML to server
-    try {
-      const res = await fetch('/api/album', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: albumId, images, config }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          setShareUrl(data.url);
-        }
-      }
-    } catch (err) {
-      console.warn('Gagal menyimpan berkas HTML ke server:', err);
-    }
-
-    // 3. Refresh portal list
-    const updated = await fetchPortalAlbumsFromServer();
-    setSavedAlbums(updated);
+    setSavedAlbums(getSavedAlbums());
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
     return saved;
-  };
-
-  const handleRefreshPortal = async () => {
-    const updated = await fetchPortalAlbumsFromServer();
-    setSavedAlbums(updated);
   };
 
   // Helpers to render file sizes beautifully
@@ -923,7 +829,6 @@ export default function App() {
             setShowShareModal(true);
           }}
           onLoadSampleAlbum={handleLoadSampleAlbum}
-          onRefresh={handleRefreshPortal}
         />
         <OfflineIndicator />
       </div>

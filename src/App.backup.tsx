@@ -29,44 +29,14 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
-  ArrowLeft,
-  Save,
-  Bookmark
+  ArrowLeft
 } from 'lucide-react';
-import { ImageItem, AlbumTheme, AlbumTransition, AlbumConfig, SavedAlbum } from './types';
+import { ImageItem, AlbumTheme, AlbumTransition, AlbumConfig } from './types';
 import { compileAlbumHTML, chunkImages } from './utils/compiler';
+import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { PortalGallery } from './components/PortalGallery';
-import { AlbumKenanganLogo } from './components/AlbumKenanganLogo';
-import { 
-  getSavedAlbums, 
-  saveAlbumToPortal, 
-  deleteAlbumFromPortal,
-  fetchPortalAlbumsFromServer
-} from './utils/portalStorage';
-import { generateSampleAlbum } from './utils/sampleData';
 
 export default function App() {
-  // Navigation screen: 'portal' (Instagram gallery), 'editor' (1. Atur Album), or 'preview' (2. Pratinjau)
-  const [currentScreen, setCurrentScreen] = useState<'portal' | 'editor' | 'preview'>('portal');
-  const [savedAlbums, setSavedAlbums] = useState<SavedAlbum[]>(() => {
-    let list = getSavedAlbums();
-    // Filter out the demo sample album to ensure the user gets a 100% clean list
-    const filtered = list.filter(album => album.id !== 'demo-sample-album');
-    if (list.length !== filtered.length) {
-      try {
-        localStorage.setItem('kamera_albums_portal_v1', JSON.stringify(filtered));
-        localStorage.removeItem('kamera_album_demo-sample-album');
-      } catch (err) {
-        console.warn('Gagal membersihkan album demo dari localStorage:', err);
-      }
-    }
-    return filtered;
-  });
-  const [currentAlbumId, setCurrentAlbumId] = useState<string>('');
-  const [savedFeedback, setSavedFeedback] = useState<boolean>(false);
-  const [showDeleteActiveAlbumModal, setShowDeleteActiveAlbumModal] = useState<boolean>(false);
-
   // Check if user opened a shared album link (/album/:id or ?album=:id)
   const initialAlbumId = typeof window !== 'undefined' ? (() => {
     const path = window.location.pathname;
@@ -177,7 +147,6 @@ export default function App() {
   const [autoplay, setAutoplay] = useState<boolean>(false);
   const [autoplayInterval, setAutoplayInterval] = useState<number>(5);
   const [photosPerPage, setPhotosPerPage] = useState<number>(4);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
 
   // Image State
   const [images, setImages] = useState<ImageItem[]>([]);
@@ -502,27 +471,9 @@ export default function App() {
       const generatedUrl = `${window.location.origin}/album/${data.id}`;
       setShareUrl(generatedUrl);
 
-      // Save to localStorage and portal gallery
+      // Save to localStorage so if the creator opens it in the browser or offline, it loads instantly
       try {
-        const albumId = data.id;
-        const oldAlbumId = currentAlbumId;
-        setCurrentAlbumId(albumId);
-        
-        saveAlbumToPortal({
-          id: albumId,
-          title,
-          subtitle,
-          images,
-          config,
-          shareUrl: generatedUrl,
-        });
-
-        // Hapus album dengan ID lokal lama dari portal jika berbeda dengan ID server baru untuk menghindari duplikasi
-        if (oldAlbumId && oldAlbumId !== albumId) {
-          deleteAlbumFromPortal(oldAlbumId);
-        }
-
-        setSavedAlbums(getSavedAlbums());
+        localStorage.setItem(`kamera_album_${data.id}`, JSON.stringify({ images, config }));
       } catch (e) {
         console.warn('LocalStorage save failed:', e);
       }
@@ -534,193 +485,12 @@ export default function App() {
     }
   };
 
-  // Sync with server portal albums on mount and when navigating to portal
-  useEffect(() => {
-    fetchPortalAlbumsFromServer().then((list) => {
-      if (list && list.length > 0) {
-        setSavedAlbums(list);
-      }
-    });
-  }, [currentScreen]);
-
   const handleCopyLink = () => {
     if (shareUrl) {
       navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  };
-
-  // Portal Handlers
-  const handleCreateNewAlbum = () => {
-    const newId = Math.random().toString(36).substring(2, 11);
-    setCurrentAlbumId(newId);
-    setImages([]);
-    setTitle('Album Kenangan');
-    setSubtitle('Koleksi kenangan indah diabadikan bersama');
-    setTheme('vintage');
-    setTransition('slide');
-    setShowPageNumbers(false);
-    setCoverImageId('');
-    setPhotosPerPage(4);
-    setShareUrl(null);
-    setActiveTab('configure');
-    setCurrentScreen('editor');
-  };
-
-  const handleSelectAlbum = async (album: SavedAlbum) => {
-    setCurrentAlbumId(album.id);
-    let albumImages = album.images || [];
-    let albumConfig = album.config || {
-      title: album.title || 'Album Kenangan',
-      subtitle: album.subtitle || '',
-      theme: 'vintage',
-      transition: 'slide',
-      showPageNumbers: false,
-      photosPerPage: 4,
-    };
-
-    // If album was created on another device (e.g. phone vs laptop), fetch full photos from server
-    if (albumImages.length === 0) {
-      try {
-        const res = await fetch(`/api/album/${album.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.images)) {
-            albumImages = data.images;
-            albumConfig = data.config || albumConfig;
-          }
-        }
-      } catch (e) {
-        console.warn('Gagal mengambil data foto lengkap dari server:', e);
-      }
-    }
-
-    setImages(albumImages);
-    setTitle(albumConfig.title || album.title || 'Album Kenangan');
-    setSubtitle(albumConfig.subtitle || album.subtitle || '');
-    setTheme(albumConfig.theme || 'vintage');
-    setTransition(albumConfig.transition || 'slide');
-    setShowPageNumbers(albumConfig.showPageNumbers || false);
-    setCoverImageId(albumConfig.coverImageId || '');
-    setPhotosPerPage(albumConfig.photosPerPage || 4);
-    setShareUrl(album.shareUrl || `${window.location.origin}/album/${album.id}`);
-    setPreviewPage(0);
-    setActiveTab('preview');
-    setCurrentScreen('preview');
-  };
-
-  const handleEditAlbum = async (album: SavedAlbum) => {
-    setCurrentAlbumId(album.id);
-    let albumImages = album.images || [];
-    let albumConfig = album.config || {
-      title: album.title || 'Album Kenangan',
-      subtitle: album.subtitle || '',
-      theme: 'vintage',
-      transition: 'slide',
-      showPageNumbers: false,
-      photosPerPage: 4,
-    };
-
-    if (albumImages.length === 0) {
-      try {
-        const res = await fetch(`/api/album/${album.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.images)) {
-            albumImages = data.images;
-            albumConfig = data.config || albumConfig;
-          }
-        }
-      } catch (e) {
-        console.warn('Gagal mengambil data foto lengkap dari server:', e);
-      }
-    }
-
-    setImages(albumImages);
-    setTitle(albumConfig.title || album.title || 'Album Kenangan');
-    setSubtitle(albumConfig.subtitle || album.subtitle || '');
-    setTheme(albumConfig.theme || 'vintage');
-    setTransition(albumConfig.transition || 'slide');
-    setShowPageNumbers(albumConfig.showPageNumbers || false);
-    setCoverImageId(albumConfig.coverImageId || '');
-    setPhotosPerPage(albumConfig.photosPerPage || 4);
-    setShareUrl(album.shareUrl || `${window.location.origin}/album/${album.id}`);
-    setActiveTab('configure');
-    setCurrentScreen('editor');
-  };
-
-  const handleDeleteAlbum = async (albumId: string) => {
-    deleteAlbumFromPortal(albumId);
-    try {
-      await fetch(`/api/portal/albums/${albumId}`, { method: 'DELETE' });
-    } catch {
-      // ignore
-    }
-    const updated = await fetchPortalAlbumsFromServer();
-    setSavedAlbums(updated);
-  };
-
-  const handleLoadSampleAlbum = () => {
-    const sample = generateSampleAlbum();
-    saveAlbumToPortal(sample);
-    fetchPortalAlbumsFromServer().then(list => setSavedAlbums(list));
-  };
-
-  const handleSaveCurrentAlbumToPortal = async () => {
-    if (images.length === 0) return null;
-    const albumId = currentAlbumId || Math.random().toString(36).substring(2, 11);
-    setCurrentAlbumId(albumId);
-    const config: AlbumConfig = {
-      title,
-      subtitle,
-      theme,
-      transition,
-      showPageNumbers,
-      coverImageId,
-      autoplay,
-      autoplayInterval,
-      photosPerPage,
-    };
-
-    // 1. Save to local storage for offline access
-    const saved = saveAlbumToPortal({
-      id: albumId,
-      title,
-      subtitle,
-      images,
-      config,
-      shareUrl: shareUrl || `${window.location.origin}/album/${albumId}`,
-    });
-
-    // 2. Automatically compile and save standalone HTML to server
-    try {
-      const res = await fetch('/api/album', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: albumId, images, config }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) {
-          setShareUrl(data.url);
-        }
-      }
-    } catch (err) {
-      console.warn('Gagal menyimpan berkas HTML ke server:', err);
-    }
-
-    // 3. Refresh portal list
-    const updated = await fetchPortalAlbumsFromServer();
-    setSavedAlbums(updated);
-    setSavedFeedback(true);
-    setTimeout(() => setSavedFeedback(false), 2500);
-    return saved;
-  };
-
-  const handleRefreshPortal = async () => {
-    const updated = await fetchPortalAlbumsFromServer();
-    setSavedAlbums(updated);
   };
 
   // Helpers to render file sizes beautifully
@@ -908,137 +678,80 @@ export default function App() {
     );
   }
 
-  // 1. RENDER PORTAL GALLERY (INSTAGRAM STYLE)
-  if (currentScreen === 'portal') {
-    return (
-      <div className="min-h-screen bg-[#faf9f6]">
-        <PortalGallery
-          albums={savedAlbums}
-          onCreateNewAlbum={handleCreateNewAlbum}
-          onSelectAlbum={handleSelectAlbum}
-          onEditAlbum={handleEditAlbum}
-          onDeleteAlbum={handleDeleteAlbum}
-          onShareAlbum={(album) => {
-            handleSelectAlbum(album);
-            setShowShareModal(true);
-          }}
-          onLoadSampleAlbum={handleLoadSampleAlbum}
-          onRefresh={handleRefreshPortal}
-        />
-        <OfflineIndicator />
-      </div>
-    );
-  }
-
-  // 2. RENDER WORKSPACE: 1. ATUR ALBUM & 2. PRATINJAU
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col antialiased" id="main-container">
       
-      {/* MINIMALIST HEADER BAR WITH BACK TO PORTAL & QUICK SAVE */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-40 px-4 sm:px-6 py-3.5" id="app-header">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              onClick={() => setCurrentScreen('portal')}
-              className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-              id="back-to-portal-btn"
-              title="Kembali ke Galeri Portal"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span className="hidden sm:inline">Galeri Portal</span>
-            </button>
-
-            <div className="h-5 w-px bg-slate-200 hidden sm:block" />
-
-            <div className="flex items-center gap-2">
-              <AlbumKenanganLogo size="sm" />
-              <div>
-                <h1 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate max-w-[120px] sm:max-w-xs">
-                  {title || 'Album Kenangan'}
-                </h1>
-                <p className="text-[10px] text-slate-400 font-medium hidden sm:block">
-                  {currentScreen === 'preview' ? 'Mode Lihat Album' : '1. Atur Album'}
-                </p>
-              </div>
+      {/* MINIMALIST HEADER BAR */}
+      <header className="bg-white border-b border-slate-100 sticky top-0 z-40 px-6 py-4" id="app-header">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-slate-900 text-white p-2 rounded-xl flex items-center justify-center">
+              <Camera className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-normal text-slate-900 lowercase leading-none" style={{ fontFamily: "'Dancing Script', cursive" }}>
+                album kenangan
+              </h1>
+              <p className="text-[11px] text-slate-400 font-medium">Generator Album Foto Offline-First</p>
             </div>
           </div>
           
-          {/* Action buttons on the right */}
-          <div className="flex items-center gap-2">
-            {/* Save to Portal Feedback Button (Hanya di mode editor) */}
-            {currentScreen === 'editor' && images.length > 0 && (
-              <button
-                onClick={handleSaveCurrentAlbumToPortal}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
-                  savedFeedback 
-                    ? 'bg-emerald-600 text-white shadow-xs' 
-                    : 'bg-slate-900 hover:bg-slate-800 text-white shadow-2xs active:scale-95'
-                }`}
-                id="save-to-portal-btn"
-              >
-                {savedFeedback ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 animate-bounce" />
-                    <span className="hidden sm:inline">Tersimpan di Galeri!</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Simpan ke Galeri</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Segmented Switcher disembunyikan seluruhnya agar tidak membingungkan pengguna */}
-            {currentScreen === 'editor' && images.length > 0 && (
-              <button
-                onClick={() => {
-                  setActiveTab('preview');
-                  setCurrentScreen('preview');
-                }}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Lihat Pratinjau Album"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Lihat Pratinjau</span>
-              </button>
-            )}
-
-            {/* Tombol Hapus Album jika sedang di mode Lihat Album (preview) */}
-            {currentScreen === 'preview' && (
-              <button
-                onClick={() => setShowDeleteActiveAlbumModal(true)}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs border border-rose-200/60"
-                title="Hapus Album Ini"
-                id="header-delete-album-btn"
-              >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                <span className="hidden sm:inline">Hapus Album</span>
-              </button>
-            )}
+          {/* Subtle information tag & PWA button */}
+          <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-2 text-xs text-slate-400 font-semibold">
+              <span>Kompresi WebP Lokal</span>
+              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+              <span>Maks 40 Foto</span>
+            </div>
+            <PWAInstallButton />
           </div>
         </div>
       </header>
 
       {/* CORE WORKSPACE */}
       <div className="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6" id="workspace">
+        
+        {/* RESPONSIVE SEGMENTED TAB SWITCHER FOR MOBILE */}
+        <div className="lg:hidden w-full bg-slate-100 p-1 rounded-xl flex" id="mobile-tab-switcher">
+          <button
+            onClick={() => setActiveTab('configure')}
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'configure' 
+                ? 'bg-white text-slate-900 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Settings className="w-4 h-4" /> 1. Atur Album
+          </button>
+          <button
+            onClick={() => setActiveTab('preview')}
+            className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 relative ${
+              activeTab === 'preview' 
+                ? 'bg-white text-slate-900 shadow-sm' 
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Eye className="w-4 h-4" /> 2. Pratinjau & Simpan
+            {images.length > 0 && (
+              <span className="absolute top-2 right-4 w-2 h-2 bg-indigo-500 rounded-full" />
+            )}
+          </button>
+        </div>
 
-        {/* WORKSPACE LAYOUT CONTAINER */}
-        <div className="w-full flex justify-center items-start">
-            
-            {/* COLUMN 1: FORM CONFIGURATION & IMAGE QUEUE */}
-            {currentScreen === 'editor' && (
-              <section 
-                className="w-full max-w-3xl flex flex-col gap-6 animate-fadeIn" 
-                id="configure-step-section"
-              >
-              {/* ALBUM CONFIG SECTION */}
-              <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-5" id="design-card">
-                <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
-                  <Settings className="w-4 h-4 text-slate-400" />
-                  <h2 className="font-extrabold text-slate-900 text-sm tracking-tight">Kustomisasi Konten & Tema</h2>
-                </div>
+        {/* WORKSPACE LAYOUT GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          {/* COLUMN 1: FORM CONFIGURATION & IMAGE QUEUE */}
+          <section 
+            className={`lg:col-span-7 flex flex-col gap-6 ${activeTab === 'configure' ? 'block' : 'hidden lg:block'}`} 
+            id="configure-step-section"
+          >
+            {/* ALBUM CONFIG SECTION */}
+            <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs space-y-5" id="design-card">
+              <div className="flex items-center gap-2 border-b border-slate-50 pb-3">
+                <Settings className="w-4 h-4 text-slate-400" />
+                <h2 className="font-extrabold text-slate-900 text-sm tracking-tight">Kustomisasi Konten & Tema</h2>
+              </div>
 
               <div className="space-y-4">
                 {/* Title and Subtitle in one elegant block */}
@@ -1094,67 +807,49 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Collapsible non-priority options (Transition effect & Page indicators) */}
-                <div className="pt-2 border-t border-slate-50">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                    className="flex items-center gap-1.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 transition-all cursor-pointer"
-                  >
-                    <span>{showAdvancedSettings ? 'Sembunyikan' : 'Tampilkan'} Pengaturan Lanjutan (Efek & Indikator)</span>
-                    <span className="text-[10px] text-slate-400 font-normal">({showAdvancedSettings ? 'Klik untuk menutup' : 'Klik untuk membuka'})</span>
-                  </button>
-                </div>
-
-                {showAdvancedSettings && (
-                  <div className="space-y-4 pt-4 border-t border-slate-50 animate-fadeIn">
-                    {/* Transition style & toggle in one row */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Efek Animasi Halaman</label>
-                        <div className="bg-slate-100 p-0.5 rounded-lg flex gap-1">
-                          {[
-                            { id: 'slide', label: 'Geser Layar' },
-                            { id: 'fade', label: 'Soft Fade' }
-                          ].map((tr) => (
-                            <button
-                              key={tr.id}
-                              type="button"
-                              onClick={() => setTransition(tr.id as AlbumTransition)}
-                              className={`flex-1 py-1 px-2.5 rounded-md text-[10px] font-bold text-center cursor-pointer transition-all ${
-                                transition === tr.id
-                                  ? 'bg-white text-slate-900 shadow-xs'
-                                  : 'text-slate-500 hover:text-slate-800'
-                              }`}
-                            >
-                              {tr.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col justify-end">
+                {/* Transition style & toggle in one row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Efek Animasi Halaman</label>
+                    <div className="bg-slate-100 p-0.5 rounded-lg flex gap-1">
+                      {[
+                        { id: 'slide', label: 'Geser Layar' },
+                        { id: 'fade', label: 'Soft Fade' }
+                      ].map((tr) => (
                         <button
-                          type="button"
-                          onClick={() => setShowPageNumbers(!showPageNumbers)}
-                          className={`flex items-center justify-between p-1.5 px-3 bg-slate-50 hover:bg-slate-100/80 rounded-lg border border-slate-200/60 transition-all text-left w-full cursor-pointer`}
+                          key={tr.id}
+                          onClick={() => setTransition(tr.id as AlbumTransition)}
+                          className={`flex-1 py-1 px-2.5 rounded-md text-[10px] font-bold text-center cursor-pointer transition-all ${
+                            transition === tr.id
+                              ? 'bg-white text-slate-900 shadow-xs'
+                              : 'text-slate-500 hover:text-slate-800'
+                          }`}
                         >
-                          <div>
-                            <span className="text-[11px] font-bold text-slate-700">Tampilkan Indikator Halaman</span>
-                            <p className="text-[9px] text-slate-400">Tulis indeks angka di bawah layar</p>
-                          </div>
-                          <div className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors ${
-                            showPageNumbers ? 'bg-slate-900' : 'bg-slate-300'
-                          }`}>
-                            <div className={`bg-white w-3 h-3 rounded-full shadow-xs transform duration-200 ease-in-out ${
-                              showPageNumbers ? 'translate-x-4' : 'translate-x-0'
-                            }`} />
-                          </div>
+                          {tr.label}
                         </button>
-                      </div>
+                      ))}
                     </div>
                   </div>
-                )}
+
+                  <div className="flex flex-col justify-end">
+                    <button
+                      onClick={() => setShowPageNumbers(!showPageNumbers)}
+                      className={`flex items-center justify-between p-1.5 px-3 bg-slate-50 hover:bg-slate-100/80 rounded-lg border border-slate-200/60 transition-all text-left w-full cursor-pointer`}
+                    >
+                      <div>
+                        <span className="text-[11px] font-bold text-slate-700">Tampilkan Indikator Halaman</span>
+                        <p className="text-[9px] text-slate-400">Tulis indeks angka di bawah layar</p>
+                      </div>
+                      <div className={`w-8 h-4 flex items-center rounded-full p-0.5 transition-colors ${
+                        showPageNumbers ? 'bg-slate-900' : 'bg-slate-300'
+                      }`}>
+                        <div className={`bg-white w-3 h-3 rounded-full shadow-xs transform duration-200 ease-in-out ${
+                          showPageNumbers ? 'translate-x-4' : 'translate-x-0'
+                        }`} />
+                      </div>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Cover Image Customizer */}
                 {images.length > 0 && (
@@ -1313,59 +1008,14 @@ export default function App() {
                   </div>
                 </div>
               )}
-
-              {/* ACTION: KIRIM / SIMPAN HASIL KE PORTAL */}
-              <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3" id="save-to-portal-action-area">
-                <p className="text-[11px] text-slate-400 font-medium">
-                  {images.length > 0 
-                    ? `${images.length} foto siap dikirim ke Portal Galeri.` 
-                    : 'Unggah foto terlebih dahulu sebelum mengirim ke Portal.'}
-                </p>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <button
-                    onClick={() => {
-                      const saved = handleSaveCurrentAlbumToPortal();
-                      if (saved) {
-                        setCurrentScreen('portal');
-                      }
-                    }}
-                    disabled={images.length === 0}
-                    className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                      images.length === 0
-                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                        : 'bg-slate-900 hover:bg-slate-800 active:scale-95 text-white shadow-xs'
-                    }`}
-                    id="submit-to-portal-btn"
-                  >
-                    <Save className="w-4 h-4 text-amber-400" />
-                    <span>Kirim Hasil ke Portal</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      handleSaveCurrentAlbumToPortal();
-                      setActiveTab('preview');
-                      setCurrentScreen('preview');
-                    }}
-                    disabled={images.length === 0}
-                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Buka Pratinjau Album"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Lihat Pratinjau</span>
-                  </button>
-                </div>
-              </div>
             </div>
           </section>
-        )}
 
           {/* COLUMN 2: LIVE PRATINJAU & EXPORT PORTAL */}
-          {currentScreen === 'preview' && (
-            <section 
-              className="w-full max-w-xl flex flex-col gap-6 animate-fadeIn" 
-              id="preview-step-section"
-            >
+          <section 
+            className={`lg:col-span-5 flex flex-col gap-6 ${activeTab === 'preview' ? 'block' : 'hidden lg:block'}`} 
+            id="preview-step-section"
+          >
             {/* COMPACT LIVING PREVIEW PHONE */}
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-xs flex flex-col items-center" id="device-wrapper-card">
               <div className="w-full flex items-center justify-between border-b border-slate-50 pb-3 mb-4">
@@ -1683,20 +1333,6 @@ export default function App() {
 
             {/* DOWNLOAD EXPORT CTA */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col gap-3" id="export-action-box">
-              {currentScreen === 'preview' && (
-                <div className="pb-1">
-                  <button
-                    onClick={() => {
-                      setActiveTab('configure');
-                      setCurrentScreen('editor');
-                    }}
-                    className="w-full py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Settings className="w-3.5 h-3.5" /> 1. Atur / Edit Album
-                  </button>
-                </div>
-              )}
-
               <button
                 onClick={handleShareAlbum}
                 disabled={images.length === 0}
@@ -1728,7 +1364,6 @@ export default function App() {
               )}
             </div>
           </section>
-        )}
 
         </div>
 
@@ -1926,6 +1561,20 @@ export default function App() {
                   </div>
 
                   <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        const albumId = shareUrl.split('/album/')[1]?.split('?')[0];
+                        if (albumId) {
+                          setViewerAlbumId(albumId);
+                          setShowShareModal(false);
+                          window.history.pushState({}, '', `/album/${albumId}`);
+                        }
+                      }}
+                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Tonton Album Langsung di Sini
+                    </button>
+
                     <a 
                       href={`https://api.whatsapp.com/send?text=${encodeURIComponent('Halo! Lihat album foto interaktif kami: ' + shareUrl)}`}
                       target="_blank"
@@ -1941,7 +1590,7 @@ export default function App() {
                       rel="noopener noreferrer"
                       className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] text-center"
                     >
-                      🌍 Buka Disini
+                      🌍 Buka di Tab Baru
                     </a>
                   </div>
 
@@ -1950,54 +1599,6 @@ export default function App() {
                   </div>
                 </div>
               ) : null}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ACTIVE ALBUM DELETE CONFIRMATION MODAL */}
-      <AnimatePresence>
-        {showDeleteActiveAlbumModal && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs z-50 flex items-center justify-center p-4"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-100 max-w-sm w-full relative space-y-4"
-            >
-              <div className="text-center space-y-2">
-                <span className="text-3xl block">🗑️</span>
-                <h3 className="font-extrabold text-slate-900 text-base tracking-tight text-center">Hapus Album Ini?</h3>
-                <p className="text-[11px] text-slate-500 leading-relaxed text-center">
-                  Apakah Anda yakin ingin menghapus album <strong className="text-slate-800">"{title}"</strong> secara permanen dari galeri portal Anda? Tindakan ini tidak dapat dibatalkan.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  onClick={() => setShowDeleteActiveAlbumModal(false)}
-                  className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={() => {
-                    if (currentAlbumId) {
-                      handleDeleteAlbum(currentAlbumId);
-                      setCurrentScreen('portal');
-                    }
-                    setShowDeleteActiveAlbumModal(false);
-                  }}
-                  className="py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm shadow-rose-600/10"
-                >
-                  Ya, Hapus Album
-                </button>
-              </div>
             </motion.div>
           </motion.div>
         )}

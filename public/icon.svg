@@ -1,14 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#0f172a;stop-opacity:1" />
       <stop offset="100%" style="stop-color:#1e293b;stop-opacity:1" />
     </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#d97706;stop-opacity:1" />
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#000000" flood-opacity="0.3" />
+    </filter>
   </defs>
-  <rect width="512" height="512" rx="120" fill="url(#grad)" />
-  <path d="M 160 160 L 210 120 L 302 120 L 352 160 Z" fill="#f8fafc" />
-  <rect x="112" y="160" width="288" height="210" rx="30" fill="#f8fafc" />
-  <circle cx="256" cy="265" r="75" fill="none" stroke="#0f172a" stroke-width="16" />
-  <circle cx="256" cy="265" r="45" fill="#0f172a" />
-  <circle cx="340" cy="205" r="14" fill="#ef4444" />
+
+  <!-- Base App Tile with rounded corners -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Gold Accent Ring -->
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="none" stroke="url(#goldGrad)" stroke-width="4" stroke-opacity="0.4" />
+
+  <!-- Memory Book / Photo Album Body -->
+  <g filter="url(#subtleShadow)">
+    <!-- Book cover back -->
+    <rect x="110" y="96" width="292" height="320" rx="28" fill="#f8fafc" />
+    
+    <!-- Book spine stitching / line -->
+    <path d="M156 96 L156 416" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round" stroke-dasharray="8 8" />
+
+    <!-- Photo card inserted inside album -->
+    <rect x="180" y="132" width="190" height="150" rx="14" fill="#0f172a" />
+    <rect x="186" y="138" width="178" height="138" rx="10" fill="#1e293b" />
+    
+    <!-- Photo scene: Sun/Moon and mountain landscape -->
+    <circle cx="318" cy="176" r="18" fill="url(#goldGrad)" />
+    <path d="M192 260 L240 196 L284 246 L316 214 L360 260 Z" fill="#334155" />
+    <path d="M228 260 L268 210 L300 250 L328 226 L360 260 Z" fill="#475569" opacity="0.8" />
+
+    <!-- Photo tape / corner mounts -->
+    <polygon points="174,142 194,122 208,122 174,156" fill="url(#goldGrad)" opacity="0.8" />
+    <polygon points="356,122 370,122 376,142 376,156" fill="url(#goldGrad)" opacity="0.8" />
+
+    <!-- Handwritten lines / caption on the album page -->
+    <rect x="180" y="312" width="190" height="12" rx="6" fill="#e2e8f0" />
+    <rect x="180" y="338" width="130" height="12" rx="6" fill="#e2e8f0" />
+
+    <!-- Golden Silk Bookmark Ribbon -->
+    <path d="M220 96 L220 220 L238 202 L256 220 L256 96 Z" fill="url(#goldGrad)" />
+  </g>
 </svg>

@@ -24,18 +24,3 @@ export interface AlbumConfig {
   autoplayInterval?: number; // seconds
   photosPerPage?: number; // 1, 2, 3, or 4
 }
-
-export interface SavedAlbum {
-  id: string;
-  title: string;
-  subtitle?: string;
-  createdAt: number;
-  updatedAt: number;
-  images: ImageItem[];
-  config: AlbumConfig;
-  coverImage?: string;
-  shareUrl?: string;
-  htmlSize?: number;
-  totalPhotos?: number;
-}
-

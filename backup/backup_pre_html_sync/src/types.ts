@@ -35,7 +35,5 @@ export interface SavedAlbum {
   config: AlbumConfig;
   coverImage?: string;
   shareUrl?: string;
-  htmlSize?: number;
-  totalPhotos?: number;
 }
 

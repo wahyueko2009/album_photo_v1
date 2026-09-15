@@ -1,0 +1,6 @@
+{
+  "name": "Mobile Photo Album Generator",
+  "description": "Generator album foto mobile offline-first yang mengompresi foto lokal ke format WebP dan mengompilasi album interaktif menjadi satu file HTML mandiri.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
