@@ -31,7 +31,8 @@ import {
   RotateCcw,
   ArrowLeft,
   Save,
-  Bookmark
+  Bookmark,
+  Globe
 } from 'lucide-react';
 import { ImageItem, AlbumTheme, AlbumTransition, AlbumConfig, SavedAlbum } from './types';
 import { compileAlbumHTML, chunkImages } from './utils/compiler';
@@ -206,6 +207,7 @@ export default function App() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [isOpeningHere, setIsOpeningHere] = useState<boolean>(false);
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -531,6 +533,80 @@ export default function App() {
       setShareError(err.message || 'Gagal membuat tautan album.');
     } finally {
       setIsSharing(false);
+    }
+  };
+
+  // Handler for "Buka Disini"
+  const handleOpenHere = async () => {
+    if (images.length === 0) {
+      alert('Unggah setidaknya 1 foto terlebih dahulu.');
+      return;
+    }
+
+    // 1. If shareUrl already exists, open it directly in a new tab
+    if (shareUrl) {
+      window.open(shareUrl, '_blank');
+      return;
+    }
+
+    // 2. If currentAlbumId exists, construct URL and open
+    if (currentAlbumId) {
+      const targetUrl = `${window.location.origin}/album/${currentAlbumId}`;
+      setShareUrl(targetUrl);
+      window.open(targetUrl, '_blank');
+      return;
+    }
+
+    // 3. Otherwise, compile and save to server first, then open
+    setIsOpeningHere(true);
+    try {
+      const config: AlbumConfig = {
+        title,
+        subtitle,
+        theme,
+        transition,
+        showPageNumbers,
+        coverImageId,
+        autoplay,
+        autoplayInterval,
+        photosPerPage
+      };
+
+      const response = await fetch('/api/album', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images, config })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const targetUrl = `${window.location.origin}/album/${data.id}`;
+        setShareUrl(targetUrl);
+        setCurrentAlbumId(data.id);
+        window.open(targetUrl, '_blank');
+      } else {
+        setViewerData({ images, config });
+        setCurrentScreen('fullscreen');
+      }
+    } catch (err) {
+      console.error('Error opening album:', err);
+      setViewerData({
+        images,
+        config: {
+          title,
+          subtitle,
+          theme,
+          transition,
+          showPageNumbers,
+          coverImageId,
+          autoplay,
+          autoplayInterval,
+          photosPerPage
+        }
+      });
+      setCurrentScreen('fullscreen');
+    } finally {
+      setIsOpeningHere(false);
     }
   };
 
@@ -1656,31 +1732,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* MINIMALIST SUMMARY STATISTICS CARD */}
-            {images.length > 0 && (
-              <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs" id="performance-summary">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-3">Ringkasan File Bundle</span>
-                
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-50">
-                    <span className="text-[9px] font-bold text-slate-400 block">Ukuran File Asli</span>
-                    <span className="text-xs font-black text-slate-500 mt-0.5 block">{formatSize(originalTotalSize)}</span>
-                  </div>
-                  <div className="bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100/50">
-                    <span className="text-[9px] font-bold text-emerald-700 block">Ukuran Kompres</span>
-                    <span className="text-xs font-black text-emerald-600 mt-0.5 block">{formatSize(compressedTotalSize)}</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/50 border border-slate-100 p-3 rounded-xl text-[10px] font-medium text-slate-500 flex items-center gap-2">
-                  <span className="bg-slate-900 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded leading-none">
-                    {sizeSavings}% Hemat
-                  </span>
-                  <span>Semua foto diubah menjadi format WebP lokal sehingga album terunduh secara instan.</span>
-                </div>
-              </div>
-            )}
-
             {/* DOWNLOAD EXPORT CTA */}
             <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-xs flex flex-col gap-3" id="export-action-box">
               {currentScreen === 'preview' && (
@@ -1697,17 +1748,38 @@ export default function App() {
                 </div>
               )}
 
-              <button
-                onClick={handleShareAlbum}
-                disabled={images.length === 0}
-                className={`w-full py-3.5 px-6 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  images.length === 0
-                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                    : 'bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-md shadow-indigo-600/15'
-                }`}
-              >
-                <Share2 className="w-4 h-4" /> Bagikan Album Online (Bisa dibuka di HP)
-              </button>
+              {/* Side-by-side Action Buttons: Bagikan Album & Buka Disini */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  onClick={handleShareAlbum}
+                  disabled={images.length === 0}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    images.length === 0
+                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                      : 'bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-md shadow-indigo-600/15'
+                  }`}
+                  id="export-share-btn"
+                >
+                  <Share2 className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Bagikan Album</span>
+                </button>
+
+                <button
+                  onClick={handleOpenHere}
+                  disabled={images.length === 0 || isOpeningHere}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    images.length === 0
+                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+                      : 'bg-slate-900 hover:bg-slate-800 text-white active:scale-[0.98] shadow-md shadow-slate-900/15'
+                  }`}
+                  id="export-open-here-btn"
+                >
+                  <Globe className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="truncate">
+                    {isOpeningHere ? 'Membuka...' : 'Buka Disini'}
+                  </span>
+                </button>
+              </div>
 
               <button
                 onClick={handleDownloadAlbum}
@@ -1717,15 +1789,10 @@ export default function App() {
                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
                     : 'bg-slate-50 hover:bg-slate-100 text-slate-700 active:scale-[0.98] border border-slate-100'
                 }`}
+                id="export-download-btn"
               >
                 <Download className="w-4 h-4" /> Simpan File Offline (.html)
               </button>
-              
-              {images.length > 0 && (
-                <span className="text-center text-[10px] text-slate-400 block font-semibold">
-                  Nama File Offline: <code className="bg-slate-50 px-1 py-0.5 rounded border border-slate-100 text-slate-600 font-mono">album_{title.toLowerCase().replace(/[^a-z0-9]/g, '_') || 'foto'}.html</code>
-                </span>
-              )}
             </div>
           </section>
         )}
@@ -1933,15 +2000,6 @@ export default function App() {
                       className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 shadow-sm shadow-emerald-600/10 transition-all active:scale-[0.98] text-center"
                     >
                       💬 Kirim ke WhatsApp
-                    </a>
-
-                    <a 
-                      href={shareUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] text-center"
-                    >
-                      🌍 Buka Disini
                     </a>
                   </div>
 
