@@ -476,6 +476,7 @@ export function PortalGallery({
             </motion.div>
           </motion.div>
         )}
+
       </AnimatePresence>
     </div>
   );

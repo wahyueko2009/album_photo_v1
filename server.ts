@@ -42,7 +42,11 @@ app.post('/api/album', (req, res) => {
     // 3. Compute public URL
     const isHttps = req.headers['x-forwarded-proto'] === 'https' || req.secure || process.env.NODE_ENV === 'production';
     const protocol = isHttps ? 'https' : (req.headers['x-forwarded-proto'] || 'http');
-    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+    let host = (req.headers['x-forwarded-host'] as string) || req.headers.host || 'localhost:3000';
+    // If x-forwarded-host contains internal non-routable .ai.studio host, prioritize real Cloud Run host from req.headers.host
+    if (host.includes('.ai.studio') && req.headers.host && !req.headers.host.includes('.ai.studio')) {
+      host = req.headers.host;
+    }
     const publicUrl = `${protocol}://${host}/album/${id}`;
 
     // 4. Save lightweight metadata for portal gallery listing
@@ -158,6 +162,27 @@ app.delete('/api/portal/albums/:id', (req, res) => {
   } catch (err) {
     console.error('Error deleting album:', err);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// API endpoint to clear all albums and photos from the server (to free up space)
+app.post('/api/portal/albums/clear-all', (req, res) => {
+  try {
+    const files = fs.readdirSync(DATA_DIR);
+    let deletedCount = 0;
+    for (const file of files) {
+      if (file.endsWith('.json') || file.endsWith('.html')) {
+        const filePath = path.join(DATA_DIR, file);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          deletedCount++;
+        }
+      }
+    }
+    res.json({ success: true, message: 'Semua berkas album dan foto berhasil dihapus dari server.', deletedCount });
+  } catch (err) {
+    console.error('Error clearing all albums:', err);
+    res.status(500).json({ error: 'Gagal membersihkan data dari server.' });
   }
 });
 

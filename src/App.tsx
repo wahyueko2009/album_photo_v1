@@ -43,7 +43,8 @@ import {
   getSavedAlbums, 
   saveAlbumToPortal, 
   deleteAlbumFromPortal,
-  fetchPortalAlbumsFromServer
+  fetchPortalAlbumsFromServer,
+  clearAllLocalAlbums
 } from './utils/portalStorage';
 import { generateSampleAlbum } from './utils/sampleData';
 
@@ -66,6 +67,7 @@ export default function App() {
   });
   const [currentAlbumId, setCurrentAlbumId] = useState<string>('');
   const [savedFeedback, setSavedFeedback] = useState<boolean>(false);
+  const [isSavingPortal, setIsSavingPortal] = useState<boolean>(false);
   const [showDeleteActiveAlbumModal, setShowDeleteActiveAlbumModal] = useState<boolean>(false);
 
   // Check if user opened a shared album link (/album/:id or ?album=:id)
@@ -88,6 +90,22 @@ export default function App() {
 
   // Sync state if user uses browser Back / Forward buttons
   useEffect(() => {
+    // One-time automatic cleanup of old local test data to clean the workspace completely
+    if (!localStorage.getItem('test_cleanup_done_1')) {
+      try {
+        const keys = Object.keys(localStorage);
+        for (const key of keys) {
+          if (key.startsWith('kamera_album_') || key === 'kamera_saved_albums_v1' || key === 'kamera_saved_albums') {
+            localStorage.removeItem(key);
+          }
+        }
+        localStorage.setItem('test_cleanup_done_1', 'true');
+      } catch (e) {
+        console.error(e);
+      }
+      setSavedAlbums([]);
+    }
+
     const handlePopState = () => {
       const path = window.location.pathname;
       if (path.startsWith('/album/')) {
@@ -207,7 +225,6 @@ export default function App() {
   const [shareError, setShareError] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
-  const [isOpeningHere, setIsOpeningHere] = useState<boolean>(false);
 
   // File input ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -536,77 +553,55 @@ export default function App() {
     }
   };
 
-  // Handler for "Buka Disini"
+  // Handler for "Buka Disini" - langsung membuka album interaktif di layar ini secara mulus
   const handleOpenHere = async () => {
     if (images.length === 0) {
       alert('Unggah setidaknya 1 foto terlebih dahulu.');
       return;
     }
 
-    // 1. If shareUrl already exists, open it directly in a new tab
-    if (shareUrl) {
-      window.open(shareUrl, '_blank');
-      return;
-    }
+    const activeConfig: AlbumConfig = {
+      title,
+      subtitle,
+      theme,
+      transition,
+      showPageNumbers,
+      coverImageId,
+      autoplay,
+      autoplayInterval,
+      photosPerPage
+    };
 
-    // 2. If currentAlbumId exists, construct URL and open
-    if (currentAlbumId) {
-      const targetUrl = `${window.location.origin}/album/${currentAlbumId}`;
-      setShareUrl(targetUrl);
-      window.open(targetUrl, '_blank');
-      return;
-    }
+    // 1. Langsung buka viewer interaktif di aplikasi tanpa popup window.open yang rentan diblokir/salah DNS di iframe
+    setViewerData({ images, config: activeConfig });
+    setViewerAlbumId(currentAlbumId || 'active-viewer');
+    setViewerError(null);
+    setViewerLoading(false);
 
-    // 3. Otherwise, compile and save to server first, then open
-    setIsOpeningHere(true);
+    // 2. Simpan atau sinkronkan ke server secara background
     try {
-      const config: AlbumConfig = {
-        title,
-        subtitle,
-        theme,
-        transition,
-        showPageNumbers,
-        coverImageId,
-        autoplay,
-        autoplayInterval,
-        photosPerPage
-      };
-
       const response = await fetch('/api/album', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images, config })
+        body: JSON.stringify({ id: currentAlbumId || undefined, images, config: activeConfig })
       });
 
       if (response.ok) {
         const data = await response.json();
-        const targetUrl = `${window.location.origin}/album/${data.id}`;
-        setShareUrl(targetUrl);
+        const validUrl = `${window.location.origin}/album/${data.id}`;
+        setShareUrl(validUrl);
         setCurrentAlbumId(data.id);
-        window.open(targetUrl, '_blank');
-      } else {
-        setViewerData({ images, config });
-        setCurrentScreen('fullscreen');
-      }
-    } catch (err) {
-      console.error('Error opening album:', err);
-      setViewerData({
-        images,
-        config: {
+        saveAlbumToPortal({
+          id: data.id,
           title,
           subtitle,
-          theme,
-          transition,
-          showPageNumbers,
-          coverImageId,
-          autoplay,
-          autoplayInterval,
-          photosPerPage
-        }
-      });
-      setCurrentScreen('fullscreen');
-    } finally {
-      setIsOpeningHere(false);
+          images,
+          config: activeConfig,
+          shareUrl: validUrl
+        });
+      }
+    } catch (err) {
+      console.warn('Sinkronisasi background album:', err);
     }
   };
 
@@ -737,6 +732,20 @@ export default function App() {
     setSavedAlbums(updated);
   };
 
+  const handleClearAllAlbums = async () => {
+    clearAllLocalAlbums();
+    try {
+      await fetch('/api/portal/albums/clear-all', { method: 'POST' });
+    } catch (err) {
+      console.error('Gagal menghubungi server untuk pembersihan massal:', err);
+    }
+    // Update local state to empty
+    setSavedAlbums([]);
+    // Clear current editor session if any to avoid re-saving
+    setImages([]);
+    setCurrentAlbumId('');
+  };
+
   const handleLoadSampleAlbum = () => {
     const sample = generateSampleAlbum();
     saveAlbumToPortal(sample);
@@ -745,6 +754,7 @@ export default function App() {
 
   const handleSaveCurrentAlbumToPortal = async () => {
     if (images.length === 0) return null;
+    setIsSavingPortal(true);
     const albumId = currentAlbumId || Math.random().toString(36).substring(2, 11);
     setCurrentAlbumId(albumId);
     const config: AlbumConfig = {
@@ -789,6 +799,7 @@ export default function App() {
     // 3. Refresh portal list
     const updated = await fetchPortalAlbumsFromServer();
     setSavedAlbums(updated);
+    setIsSavingPortal(false);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
     return saved;
@@ -958,18 +969,10 @@ export default function App() {
             }}
             className="pointer-events-auto bg-slate-900/80 hover:bg-slate-900 text-white backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-1.5 transition active:scale-95 cursor-pointer border border-white/10"
           >
-            <ArrowLeft className="w-3.5 h-3.5" /> Buat Album Baru
+            <ArrowLeft className="w-3.5 h-3.5" /> Kembali
           </button>
 
           <div className="pointer-events-auto flex items-center gap-2">
-            <a
-              href={`https://api.whatsapp.com/send?text=${encodeURIComponent('Halo! Lihat album foto interaktif kami: ' + window.location.href)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-emerald-600/90 hover:bg-emerald-600 text-white backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-1.5 transition active:scale-95 border border-white/10"
-            >
-              💬 Bagikan ke WA
-            </a>
           </div>
         </div>
 
@@ -1041,46 +1044,6 @@ export default function App() {
           
           {/* Action buttons on the right */}
           <div className="flex items-center gap-2">
-            {/* Save to Portal Feedback Button (Hanya di mode editor) */}
-            {currentScreen === 'editor' && images.length > 0 && (
-              <button
-                onClick={handleSaveCurrentAlbumToPortal}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
-                  savedFeedback 
-                    ? 'bg-emerald-600 text-white shadow-xs' 
-                    : 'bg-slate-900 hover:bg-slate-800 text-white shadow-2xs active:scale-95'
-                }`}
-                id="save-to-portal-btn"
-              >
-                {savedFeedback ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 animate-bounce" />
-                    <span className="hidden sm:inline">Tersimpan di Galeri!</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Simpan ke Galeri</span>
-                  </>
-                )}
-              </button>
-            )}
-
-            {/* Segmented Switcher disembunyikan seluruhnya agar tidak membingungkan pengguna */}
-            {currentScreen === 'editor' && images.length > 0 && (
-              <button
-                onClick={() => {
-                  setActiveTab('preview');
-                  setCurrentScreen('preview');
-                }}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Lihat Pratinjau Album"
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Lihat Pratinjau</span>
-              </button>
-            )}
-
             {/* Tombol Hapus Album jika sedang di mode Lihat Album (preview) */}
             {currentScreen === 'preview' && (
               <button
@@ -1394,27 +1357,42 @@ export default function App() {
               <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3" id="save-to-portal-action-area">
                 <p className="text-[11px] text-slate-400 font-medium">
                   {images.length > 0 
-                    ? `${images.length} foto siap dikirim ke Portal Galeri.` 
-                    : 'Unggah foto terlebih dahulu sebelum mengirim ke Portal.'}
+                    ? `${images.length} foto siap disimpan ke Galeri.` 
+                    : 'Unggah foto terlebih dahulu sebelum menyimpan ke Galeri.'}
                 </p>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <button
-                    onClick={() => {
-                      const saved = handleSaveCurrentAlbumToPortal();
-                      if (saved) {
-                        setCurrentScreen('portal');
-                      }
+                    onClick={async () => {
+                      await handleSaveCurrentAlbumToPortal();
                     }}
-                    disabled={images.length === 0}
+                    disabled={images.length === 0 || isSavingPortal}
                     className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                       images.length === 0
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : savedFeedback
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/15'
+                        : isSavingPortal
+                        ? 'bg-slate-300 text-slate-600 cursor-wait'
                         : 'bg-slate-900 hover:bg-slate-800 active:scale-95 text-white shadow-xs'
                     }`}
                     id="submit-to-portal-btn"
                   >
-                    <Save className="w-4 h-4 text-amber-400" />
-                    <span>Kirim Hasil ke Portal</span>
+                    {savedFeedback ? (
+                      <>
+                        <Check className="w-4 h-4 text-white" />
+                        <span>Berhasil Disimpan!</span>
+                      </>
+                    ) : isSavingPortal ? (
+                      <>
+                        <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-white border-t-transparent" />
+                        <span>Menyimpan...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4 text-amber-400" />
+                        <span>Simpan</span>
+                      </>
+                    )}
                   </button>
 
                   <button
@@ -1766,7 +1744,7 @@ export default function App() {
 
                 <button
                   onClick={handleOpenHere}
-                  disabled={images.length === 0 || isOpeningHere}
+                  disabled={images.length === 0}
                   className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
                     images.length === 0
                       ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
@@ -1775,9 +1753,7 @@ export default function App() {
                   id="export-open-here-btn"
                 >
                   <Globe className="w-4 h-4 shrink-0 text-emerald-400" />
-                  <span className="truncate">
-                    {isOpeningHere ? 'Membuka...' : 'Buka Disini'}
-                  </span>
+                  <span className="truncate">Buka Disini</span>
                 </button>
               </div>
 

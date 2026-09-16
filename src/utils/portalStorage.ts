@@ -107,6 +107,8 @@ export function deleteAlbumFromPortal(id: string): void {
 
 // Fetch all albums directly from the server's HTML store
 export async function fetchPortalAlbumsFromServer(): Promise<SavedAlbum[]> {
+  const localList = getSavedAlbums();
+
   try {
     const res = await fetch('/api/portal/albums');
     if (!res.ok) {
@@ -115,7 +117,7 @@ export async function fetchPortalAlbumsFromServer(): Promise<SavedAlbum[]> {
     const serverAlbums = await res.json();
     if (Array.isArray(serverAlbums)) {
       // Map server items to SavedAlbum format
-      const formatted: SavedAlbum[] = serverAlbums.map((item: any) => ({
+      const formattedFromServer: SavedAlbum[] = serverAlbums.map((item: any) => ({
         id: item.id,
         title: item.title || 'Album Kenangan',
         subtitle: item.subtitle || '',
@@ -136,29 +138,94 @@ export async function fetchPortalAlbumsFromServer(): Promise<SavedAlbum[]> {
         totalPhotos: item.totalPhotos || item.images?.length || 0,
       }));
 
-      // Cache lightweight version in localStorage for instant offline access
+      // Gabungkan album lokal dengan album server agar album di perangkat pengguna tidak pernah hilang!
+      const mergedList = [...formattedFromServer];
+
+      for (const localAlbum of localList) {
+        if (!mergedList.some(a => a.id === localAlbum.id)) {
+          // Album ada di browser lokal tapi belum ada di server (misal setelah server restart)
+          // Ambil gambar penuh dari cache browser individual untuk dikirim ulang
+          let fullImages = localAlbum.images || [];
+          if (fullImages.length === 0) {
+            try {
+              const rawItem = localStorage.getItem(`kamera_album_${localAlbum.id}`);
+              if (rawItem) {
+                const parsed = JSON.parse(rawItem);
+                fullImages = parsed.images || [];
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          mergedList.push({
+            ...localAlbum,
+            images: fullImages
+          });
+
+          // Otomatis restorasi ulang ke server di latar belakang secara asinkron
+          if (fullImages.length > 0) {
+            fetch('/api/album', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: localAlbum.id,
+                images: fullImages,
+                config: localAlbum.config
+              })
+            }).then(r => {
+              if (r.ok) {
+                console.log(`Berhasil memulihkan album ${localAlbum.id} kembali ke server`);
+              }
+            }).catch(e => {
+              console.warn(`Gagal memulihkan album ${localAlbum.id} ke server:`, e);
+            });
+          }
+        }
+      }
+
+      // Urutkan berdasarkan tanggal pembuatan terbaru
+      mergedList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      // Cache lightweight version in localStorage (kosongkan gambar untuk menghemat kuota localStorage)
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(formatted.map(a => ({
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedList.map(a => ({
           ...a,
-          images: [], // omit heavy raw base64 from list cache to keep it ultra lightweight
+          images: [], 
         }))));
       } catch {
         // ignore quota
       }
 
-      return formatted;
+      return mergedList;
     }
   } catch (err) {
     console.warn('Tidak dapat mengambil album dari server, menggunakan cache lokal:', err);
   }
 
-  return getSavedAlbums();
+  return localList;
 }
 
 export function getAlbumFromPortal(id: string): SavedAlbum | null {
   const list = getSavedAlbums();
   const found = list.find(a => a.id === id);
-  if (found) return found;
+  if (found) {
+    // Jika data gambarnya kosong (karena di-cache ringan), ambil dari cache individual
+    if (!found.images || found.images.length === 0) {
+      try {
+        const raw = localStorage.getItem(`kamera_album_${id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.images) {
+            found.images = parsed.images;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return found;
+  }
 
   // Fallback to individual key
   try {
@@ -182,4 +249,16 @@ export function getAlbumFromPortal(id: string): SavedAlbum | null {
     // ignore
   }
   return null;
+}
+
+export function clearAllLocalAlbums() {
+  try {
+    const list = getSavedAlbums();
+    for (const alb of list) {
+      localStorage.removeItem(`kamera_album_${alb.id}`);
+    }
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (err) {
+    console.error('Gagal membersihkan cache lokal:', err);
+  }
 }
