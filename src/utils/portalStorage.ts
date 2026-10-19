@@ -1,6 +1,7 @@
-import { SavedAlbum } from '../types';
+import { SavedAlbum, AlbumComment } from '../types';
 
 const STORAGE_KEY = 'kamera_albums_portal_v1';
+const LIKED_KEY = 'kamera_liked_albums_v1';
 
 export function getSavedAlbums(): SavedAlbum[] {
   if (typeof window === 'undefined') return [];
@@ -28,6 +29,10 @@ export function saveAlbumToPortal(
     coverImage?: string;
     shareUrl?: string;
     createdAt?: number;
+    likes?: number;
+    views?: number;
+    comments?: SavedAlbum['comments'];
+    isPrivate?: boolean;
   }
 ): SavedAlbum {
   const currentList = getSavedAlbums();
@@ -36,16 +41,22 @@ export function saveAlbumToPortal(
   const cover = album.coverImage || (album.images.length > 0 ? album.images[0].compressedBase64 : '');
 
   const existingIndex = currentList.findIndex(a => a.id === album.id);
+  const existing = existingIndex >= 0 ? currentList[existingIndex] : null;
+
   const updatedItem: SavedAlbum = {
     id: album.id,
     title: album.title || album.config.title || 'Album Kenangan',
     subtitle: album.subtitle || album.config.subtitle || '',
-    createdAt: album.createdAt || (existingIndex >= 0 ? currentList[existingIndex].createdAt : now),
+    createdAt: album.createdAt || (existing ? existing.createdAt : now),
     updatedAt: now,
     images: album.images,
     config: album.config,
     coverImage: cover,
     shareUrl: album.shareUrl,
+    likes: typeof album.likes === 'number' ? album.likes : (existing?.likes ?? 0),
+    views: typeof album.views === 'number' ? album.views : (existing?.views ?? 0),
+    comments: album.comments || existing?.comments || [],
+    isPrivate: album.isPrivate ?? album.config.isPrivate ?? existing?.isPrivate ?? false,
   };
 
   let newList: SavedAlbum[];
@@ -131,11 +142,16 @@ export async function fetchPortalAlbumsFromServer(): Promise<SavedAlbum[]> {
           transition: 'slide',
           showPageNumbers: false,
           photosPerPage: 4,
+          isPrivate: item.isPrivate ?? false,
         },
         coverImage: item.coverImage,
         shareUrl: item.url ? `${window.location.origin}${item.url}` : undefined,
         htmlSize: item.htmlSize,
         totalPhotos: item.totalPhotos || item.images?.length || 0,
+        likes: typeof item.likes === 'number' ? item.likes : 0,
+        views: typeof item.views === 'number' ? item.views : 0,
+        comments: Array.isArray(item.comments) ? item.comments : [],
+        isPrivate: Boolean(item.isPrivate ?? item.config?.isPrivate ?? false),
       }));
 
       // Gabungkan album lokal dengan album server agar album di perangkat pengguna tidak pernah hilang!
@@ -262,3 +278,217 @@ export function clearAllLocalAlbums() {
     console.error('Gagal membersihkan cache lokal:', err);
   }
 }
+
+// ==========================================
+// SOCIAL INTERACTION FUNCTIONS (LIKES, VIEWS, COMMENTS, PRIVACY)
+// ==========================================
+
+export function getLikedAlbumIds(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(LIKED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function toggleAlbumLike(albumId: string): Promise<{ isLiked: boolean; newLikes: number }> {
+  const likedList = getLikedAlbumIds();
+  const isCurrentlyLiked = likedList.includes(albumId);
+  const action = isCurrentlyLiked ? 'unlike' : 'like';
+
+  // Update local liked list
+  let nextLikedList: string[];
+  if (isCurrentlyLiked) {
+    nextLikedList = likedList.filter(id => id !== albumId);
+  } else {
+    nextLikedList = [...likedList, albumId];
+  }
+  try {
+    localStorage.setItem(LIKED_KEY, JSON.stringify(nextLikedList));
+  } catch (e) {
+    console.warn('Failed to save liked state locally:', e);
+  }
+
+  // Update local albums cache
+  const albums = getSavedAlbums();
+  const target = albums.find(a => a.id === albumId);
+  let newLikes = (target?.likes || 0) + (isCurrentlyLiked ? -1 : 1);
+  if (newLikes < 0) newLikes = 0;
+
+  if (target) {
+    target.likes = newLikes;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(albums));
+    } catch {
+      // ignore
+    }
+  }
+
+  // Sync to server API
+  try {
+    const res = await fetch(`/api/portal/albums/${albumId}/like`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.likes === 'number') {
+        newLikes = data.likes;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync like to server, local state applied:', err);
+  }
+
+  return {
+    isLiked: !isCurrentlyLiked,
+    newLikes
+  };
+}
+
+export async function incrementAlbumView(albumId: string): Promise<number> {
+  const albums = getSavedAlbums();
+  const target = albums.find(a => a.id === albumId);
+  let newViews = (target?.views || 0) + 1;
+
+  if (target) {
+    target.views = newViews;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(albums));
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const res = await fetch(`/api/portal/albums/${albumId}/view`, {
+      method: 'POST'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (typeof data.views === 'number') {
+        newViews = data.views;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync view to server:', err);
+  }
+
+  return newViews;
+}
+
+export async function addAlbumComment(albumId: string, name: string, message: string): Promise<AlbumComment[]> {
+  const newComment: AlbumComment = {
+    id: Math.random().toString(36).substring(2, 11),
+    name: name.trim().slice(0, 50),
+    message: message.trim().slice(0, 500),
+    createdAt: Date.now()
+  };
+
+  const albums = getSavedAlbums();
+  const target = albums.find(a => a.id === albumId);
+  if (target) {
+    if (!Array.isArray(target.comments)) target.comments = [];
+    target.comments.push(newComment);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(albums));
+    } catch {
+      // ignore
+    }
+  }
+
+  let finalComments = target?.comments || [newComment];
+
+  try {
+    const res = await fetch(`/api/portal/albums/${albumId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, message })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.comments)) {
+        finalComments = data.comments;
+        if (target) {
+          target.comments = finalComments;
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(albums));
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync comment to server, local saved:', err);
+  }
+
+  return finalComments;
+}
+
+export async function deleteAlbumComment(albumId: string, commentId: string): Promise<AlbumComment[]> {
+  const albums = getSavedAlbums();
+  const target = albums.find(a => a.id === albumId);
+  if (target && Array.isArray(target.comments)) {
+    target.comments = target.comments.filter(c => c.id !== commentId);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(albums));
+    } catch {
+      // ignore
+    }
+  }
+
+  let remaining = target?.comments || [];
+
+  try {
+    const res = await fetch(`/api/portal/albums/${albumId}/comments/${commentId}`, {
+      method: 'DELETE'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.comments)) {
+        remaining = data.comments;
+      }
+    }
+  } catch (err) {
+    console.warn('Could not sync delete comment to server:', err);
+  }
+
+  return remaining;
+}
+
+export async function updateAlbumPrivacy(albumId: string, isPrivate: boolean): Promise<boolean> {
+  const albums = getSavedAlbums();
+  const target = albums.find(a => a.id === albumId);
+  if (target) {
+    target.isPrivate = isPrivate;
+    if (target.config) {
+      target.config.isPrivate = isPrivate;
+    }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(albums));
+    } catch {
+      // ignore
+    }
+  }
+
+  try {
+    const res = await fetch(`/api/portal/albums/${albumId}/privacy`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPrivate })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return Boolean(data.isPrivate);
+    }
+  } catch (err) {
+    console.warn('Could not sync privacy to server:', err);
+  }
+
+  return isPrivate;
+}
+

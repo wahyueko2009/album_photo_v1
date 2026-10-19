@@ -53,21 +53,34 @@ app.post('/api/album', (req, res) => {
     const coverImage = images[0]?.compressedBase64 || '';
     const htmlSize = Buffer.byteLength(compiledHTML, 'utf8');
     const now = Date.now();
+    let existingMeta: any = {};
+    if (fs.existsSync(metaPath)) {
+      try {
+        existingMeta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+      } catch (e) {
+        console.warn('Error reading existing meta:', e);
+      }
+    }
+
     const metadata = {
       id,
       title: config.title || 'Album Kenangan',
       subtitle: config.subtitle || '',
       coverImage,
       totalPhotos: images.length,
-      createdAt: now,
+      createdAt: existingMeta.createdAt || now,
       updatedAt: now,
       htmlSize,
       url: publicUrl,
-      config
+      config,
+      likes: typeof existingMeta.likes === 'number' ? existingMeta.likes : 0,
+      views: typeof existingMeta.views === 'number' ? existingMeta.views : 0,
+      comments: Array.isArray(existingMeta.comments) ? existingMeta.comments : [],
+      isPrivate: config.isPrivate ?? existingMeta.isPrivate ?? false
     };
     fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), 'utf8');
 
-    res.json({ id, url: publicUrl, htmlSize, totalPhotos: images.length });
+    res.json({ id, url: publicUrl, htmlSize, totalPhotos: images.length, metadata });
   } catch (err) {
     console.error('Error saving album to local file store:', err);
     res.status(500).json({ error: 'Internal Server Error' });
@@ -186,6 +199,159 @@ app.post('/api/portal/albums/clear-all', (req, res) => {
   }
 });
 
+// SOCIAL FEATURES ENDPOINTS: Likes, Views, Comments, Privacy
+
+// 1. Like/Unlike an album
+app.post('/api/portal/albums/:id/like', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body; // 'like' | 'unlike' | 'toggle'
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Album tidak ditemukan' });
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    const currentLikes = typeof meta.likes === 'number' ? meta.likes : 0;
+    let newLikes = currentLikes;
+
+    if (action === 'unlike') {
+      newLikes = Math.max(0, currentLikes - 1);
+    } else {
+      newLikes = currentLikes + 1;
+    }
+
+    meta.likes = newLikes;
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+    res.json({ success: true, id, likes: newLikes });
+  } catch (err) {
+    console.error('Error updating like:', err);
+    res.status(500).json({ error: 'Gagal memperbarui suka' });
+  }
+});
+
+// 2. Increment view count
+app.post('/api/portal/albums/:id/view', (req, res) => {
+  try {
+    const { id } = req.params;
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Album tidak ditemukan' });
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    meta.views = (typeof meta.views === 'number' ? meta.views : 0) + 1;
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+    res.json({ success: true, id, views: meta.views });
+  } catch (err) {
+    console.error('Error incrementing views:', err);
+    res.status(500).json({ error: 'Gagal memperbarui tayangan' });
+  }
+});
+
+// 3. Add comment / ucapan (Guestbook)
+app.post('/api/portal/albums/:id/comments', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, message } = req.body;
+
+    if (!name || !name.trim() || !message || !message.trim()) {
+      return res.status(400).json({ error: 'Nama dan pesan tidak boleh kosong' });
+    }
+
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Album tidak ditemukan' });
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (!Array.isArray(meta.comments)) {
+      meta.comments = [];
+    }
+
+    const newComment = {
+      id: Math.random().toString(36).substring(2, 11),
+      name: name.trim().slice(0, 50),
+      message: message.trim().slice(0, 500),
+      createdAt: Date.now()
+    };
+
+    meta.comments.push(newComment);
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+    res.json({ success: true, id, comment: newComment, comments: meta.comments });
+  } catch (err) {
+    console.error('Error adding comment:', err);
+    res.status(500).json({ error: 'Gagal menambahkan ucapan' });
+  }
+});
+
+// 4. Delete comment
+app.delete('/api/portal/albums/:id/comments/:commentId', (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Album tidak ditemukan' });
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    if (Array.isArray(meta.comments)) {
+      meta.comments = meta.comments.filter((c: any) => c.id !== commentId);
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+    }
+
+    res.json({ success: true, id, comments: meta.comments || [] });
+  } catch (err) {
+    console.error('Error deleting comment:', err);
+    res.status(500).json({ error: 'Gagal menghapus ucapan' });
+  }
+});
+
+// 5. Update privacy (Public / Private)
+app.patch('/api/portal/albums/:id/privacy', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isPrivate } = req.body;
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+    const jsonPath = path.join(DATA_DIR, `${id}.json`);
+
+    if (!fs.existsSync(metaPath)) {
+      return res.status(404).json({ error: 'Album tidak ditemukan' });
+    }
+
+    const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+    meta.isPrivate = Boolean(isPrivate);
+    if (meta.config) {
+      meta.config.isPrivate = Boolean(isPrivate);
+    }
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2), 'utf8');
+
+    if (fs.existsSync(jsonPath)) {
+      try {
+        const fullData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+        if (fullData && fullData.config) {
+          fullData.config.isPrivate = Boolean(isPrivate);
+          fs.writeFileSync(jsonPath, JSON.stringify(fullData, null, 2), 'utf8');
+        }
+      } catch (e) {
+        console.warn('Could not update json config privacy:', e);
+      }
+    }
+
+    res.json({ success: true, id, isPrivate: meta.isPrivate });
+  } catch (err) {
+    console.error('Error toggling privacy:', err);
+    res.status(500).json({ error: 'Gagal memperbarui status privasi' });
+  }
+});
+
+
 // API endpoint to retrieve a saved album JSON (for editing or in-app preview)
 app.get('/api/album/:id', (req, res) => {
   try {
@@ -206,15 +372,28 @@ app.get('/api/album/:id', (req, res) => {
 });
 
 // Route to directly download the compiled standalone HTML file
+// Route to directly download the compiled standalone HTML file
 app.get('/album/:id/download', (req, res) => {
   try {
     const { id } = req.params;
     const htmlPath = path.join(DATA_DIR, `${id}.html`);
     const jsonPath = path.join(DATA_DIR, `${id}.json`);
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+
+    // Privacy guard: private albums cannot be downloaded directly via public link
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (meta.isPrivate) {
+          return res.status(403).send('Akses Ditolak: Album ini disetel sebagai Privat oleh pemiliknya.');
+        }
+      } catch (e) {
+        console.warn('Error reading meta for download:', e);
+      }
+    }
 
     if (fs.existsSync(htmlPath)) {
       let fileName = `album_${id}.html`;
-      const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
       if (fs.existsSync(metaPath)) {
         try {
           const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
@@ -251,6 +430,111 @@ app.get('/album/:id', (req, res) => {
     const { id } = req.params;
     const htmlPath = path.join(DATA_DIR, `${id}.html`);
     const jsonPath = path.join(DATA_DIR, `${id}.json`);
+    const metaPath = path.join(DATA_DIR, `${id}.meta.json`);
+
+    // Privacy guard: If album is private, block public direct access with a friendly notice
+    let isPrivateAlbum = false;
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        if (meta.isPrivate) isPrivateAlbum = true;
+      } catch (e) {}
+    } else if (fs.existsSync(jsonPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+        if (data?.config?.isPrivate) isPrivateAlbum = true;
+      } catch (e) {}
+    }
+
+    if (isPrivateAlbum) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(403).send(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Album Bersifat Privat - Album Kenangan</title>
+          <style>
+            body {
+              font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              background-color: #0f172a;
+              color: #f8fafc;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              padding: 24px;
+              box-sizing: border-box;
+            }
+            .card {
+              background-color: #1e293b;
+              border: 1px solid #334155;
+              padding: 44px 32px;
+              border-radius: 24px;
+              box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.4);
+              max-width: 440px;
+              width: 100%;
+              text-align: center;
+            }
+            .icon-wrapper {
+              width: 72px;
+              height: 72px;
+              background: rgba(239, 68, 68, 0.12);
+              border: 1px solid rgba(239, 68, 68, 0.25);
+              border-radius: 22px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              margin: 0 auto 24px auto;
+              color: #f87171;
+            }
+            h1 {
+              font-size: 20px;
+              font-weight: 800;
+              margin: 0 0 10px 0;
+              color: #ffffff;
+            }
+            p {
+              font-size: 14px;
+              line-height: 1.6;
+              color: #94a3b8;
+              margin: 0 0 28px 0;
+            }
+            .btn {
+              display: inline-block;
+              background-color: #f59e0b;
+              color: #0f172a;
+              font-weight: 700;
+              font-size: 14px;
+              padding: 12px 28px;
+              border-radius: 12px;
+              text-decoration: none;
+              transition: all 0.2s ease;
+            }
+            .btn:hover {
+              background-color: #d97706;
+              transform: translateY(-1px);
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card">
+            <div class="icon-wrapper">
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+              </svg>
+            </div>
+            <h1>Album Ini Bersifat Privat</h1>
+            <p>Album foto kenangan ini disetel sebagai <strong>Privat</strong> oleh pembuatnya. Hanya pemilik album yang memiliki izin untuk membukanya.</p>
+            <a href="/" class="btn">Kembali ke Beranda</a>
+          </div>
+        </body>
+        </html>
+      `);
+    }
 
     // If standalone HTML is already saved, serve it directly
     if (fs.existsSync(htmlPath)) {

@@ -32,7 +32,8 @@ import {
   ArrowLeft,
   Save,
   Bookmark,
-  Globe
+  Globe,
+  Lock
 } from 'lucide-react';
 import { ImageItem, AlbumTheme, AlbumTransition, AlbumConfig, SavedAlbum } from './types';
 import { compileAlbumHTML, chunkImages } from './utils/compiler';
@@ -44,7 +45,8 @@ import {
   saveAlbumToPortal, 
   deleteAlbumFromPortal,
   fetchPortalAlbumsFromServer,
-  clearAllLocalAlbums
+  clearAllLocalAlbums,
+  incrementAlbumView
 } from './utils/portalStorage';
 import { generateSampleAlbum } from './utils/sampleData';
 
@@ -161,6 +163,16 @@ export default function App() {
       })
       .then((data) => {
         if (isMounted) {
+          // If the album is private and not stored in visitor's own localStorage, deny access
+          const isPriv = Boolean(data.config?.isPrivate || data.isPrivate);
+          if (isPriv) {
+            const hasLocalCopy = localStorage.getItem(`kamera_album_${viewerAlbumId}`);
+            if (!hasLocalCopy) {
+              setViewerError('🔒 Album ini disetel sebagai Privat oleh pemiliknya dan tidak dapat diakses untuk umum.');
+              setViewerLoading(false);
+              return;
+            }
+          }
           setViewerData(data);
           setViewerLoading(false);
           try {
@@ -196,6 +208,7 @@ export default function App() {
   const [autoplay, setAutoplay] = useState<boolean>(false);
   const [autoplayInterval, setAutoplayInterval] = useState<number>(5);
   const [photosPerPage, setPhotosPerPage] = useState<number>(4);
+  const [isPrivate, setIsPrivate] = useState<boolean>(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState<boolean>(false);
 
   // Image State
@@ -500,7 +513,8 @@ export default function App() {
       coverImageId,
       autoplay,
       autoplayInterval,
-      photosPerPage
+      photosPerPage,
+      isPrivate
     };
 
     try {
@@ -534,6 +548,7 @@ export default function App() {
           images,
           config,
           shareUrl: generatedUrl,
+          isPrivate
         });
 
         // Hapus album dengan ID lokal lama dari portal jika berbeda dengan ID server baru untuk menghindari duplikasi
@@ -569,7 +584,8 @@ export default function App() {
       coverImageId,
       autoplay,
       autoplayInterval,
-      photosPerPage
+      photosPerPage,
+      isPrivate
     };
 
     // 1. Langsung buka viewer interaktif di aplikasi tanpa popup window.open yang rentan diblokir/salah DNS di iframe
@@ -597,7 +613,8 @@ export default function App() {
           subtitle,
           images,
           config: activeConfig,
-          shareUrl: validUrl
+          shareUrl: validUrl,
+          isPrivate
         });
       }
     } catch (err) {
@@ -634,6 +651,7 @@ export default function App() {
     setShowPageNumbers(false);
     setCoverImageId('');
     setPhotosPerPage(4);
+    setIsPrivate(false);
     setShareUrl(null);
     setActiveTab('configure');
     setCurrentScreen('editor');
@@ -650,6 +668,9 @@ export default function App() {
       showPageNumbers: false,
       photosPerPage: 4,
     };
+
+    // Increment view count when user opens an album to read
+    incrementAlbumView(album.id).catch(() => {});
 
     // If album was created on another device (e.g. phone vs laptop), fetch full photos from server
     if (albumImages.length === 0) {
@@ -675,6 +696,7 @@ export default function App() {
     setShowPageNumbers(albumConfig.showPageNumbers || false);
     setCoverImageId(albumConfig.coverImageId || '');
     setPhotosPerPage(albumConfig.photosPerPage || 4);
+    setIsPrivate(album.isPrivate ?? albumConfig.isPrivate ?? false);
     setShareUrl(album.shareUrl || `${window.location.origin}/album/${album.id}`);
     setPreviewPage(0);
     setActiveTab('preview');
@@ -716,6 +738,7 @@ export default function App() {
     setShowPageNumbers(albumConfig.showPageNumbers || false);
     setCoverImageId(albumConfig.coverImageId || '');
     setPhotosPerPage(albumConfig.photosPerPage || 4);
+    setIsPrivate(album.isPrivate ?? albumConfig.isPrivate ?? false);
     setShareUrl(album.shareUrl || `${window.location.origin}/album/${album.id}`);
     setActiveTab('configure');
     setCurrentScreen('editor');
@@ -767,6 +790,7 @@ export default function App() {
       autoplay,
       autoplayInterval,
       photosPerPage,
+      isPrivate,
     };
 
     // 1. Save to local storage for offline access
@@ -777,6 +801,7 @@ export default function App() {
       images,
       config,
       shareUrl: shareUrl || `${window.location.origin}/album/${albumId}`,
+      isPrivate,
     });
 
     // 2. Automatically compile and save standalone HTML to server
@@ -803,6 +828,10 @@ export default function App() {
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 2500);
     return saved;
+  };
+
+  const handleUpdateAlbum = (updated: SavedAlbum) => {
+    setSavedAlbums(prev => prev.map(a => a.id === updated.id ? updated : a));
   };
 
   const handleRefreshPortal = async () => {
@@ -997,7 +1026,9 @@ export default function App() {
           onSelectAlbum={handleSelectAlbum}
           onEditAlbum={handleEditAlbum}
           onDeleteAlbum={handleDeleteAlbum}
+          onUpdateAlbum={handleUpdateAlbum}
           onShareAlbum={(album) => {
+            if (album.isPrivate) return;
             handleSelectAlbum(album);
             setShowShareModal(true);
           }}
@@ -1130,6 +1161,48 @@ export default function App() {
                         <span className="text-[11px] font-bold text-slate-700 truncate">{t.label}</span>
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Album Visibility / Privacy Selector */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Visibilitas / Privasi Album</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(false)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                        !isPrivate
+                          ? 'border-emerald-600 bg-emerald-50/60 shadow-xs ring-1 ring-emerald-500/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${!isPrivate ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-900 block">🌐 Publik (Sosial)</span>
+                        <span className="text-[10px] text-slate-500 leading-tight block">Tampil di feed portal, dapat disukai & diberi pesan ucapan</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(true)}
+                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                        isPrivate
+                          ? 'border-slate-800 bg-slate-100/80 shadow-xs ring-1 ring-slate-800/20'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isPrivate ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-900 block">🔒 Privat (Pribadi)</span>
+                        <span className="text-[10px] text-slate-500 leading-tight block">Hanya untuk koleksi pribadi Anda di tab Privat</span>
+                      </div>
+                    </button>
                   </div>
                 </div>
 
@@ -1730,16 +1803,24 @@ export default function App() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <button
                   onClick={handleShareAlbum}
-                  disabled={images.length === 0}
-                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold text-white transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                    images.length === 0
-                      ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-                      : 'bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] shadow-md shadow-indigo-600/15'
+                  disabled={images.length === 0 || isPrivate}
+                  className={`w-full py-3 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                    images.length === 0 || isPrivate
+                      ? 'bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed shadow-none'
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white active:scale-[0.98] shadow-md shadow-indigo-600/15 cursor-pointer'
                   }`}
                   id="export-share-btn"
+                  title={
+                    isPrivate
+                      ? 'Icon bagikan baru aktif jika status album dibuat Publik'
+                      : 'Bagikan Tautan Album'
+                  }
                 >
                   <Share2 className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Bagikan Album</span>
+                  <span className="truncate">
+                    {isPrivate ? 'Bagikan (Hanya Album Publik)' : 'Bagikan Album'}
+                  </span>
+                  {isPrivate && <Lock className="w-3.5 h-3.5 text-slate-400 shrink-0" />}
                 </button>
 
                 <button
@@ -1756,6 +1837,48 @@ export default function App() {
                   <span className="truncate">Buka Disini</span>
                 </button>
               </div>
+
+              {/* Informative notice if album is private */}
+              {isPrivate && (
+                <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-2.5 text-[11px] text-amber-900 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span className="truncate">Status album <strong>Privat</strong>. Tombol bagikan dinonaktifkan.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPrivate(false);
+                      // Auto-save privacy change to portal if album is already saved
+                      if (currentAlbumId) {
+                        saveAlbumToPortal({
+                          id: currentAlbumId,
+                          title,
+                          subtitle,
+                          images,
+                          config: {
+                            title,
+                            subtitle,
+                            theme,
+                            transition,
+                            showPageNumbers,
+                            coverImageId,
+                            autoplay,
+                            autoplayInterval,
+                            photosPerPage,
+                            isPrivate: false
+                          },
+                          isPrivate: false
+                        });
+                        setSavedAlbums(getSavedAlbums());
+                      }
+                    }}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shrink-0 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Ubah ke Publik
+                  </button>
+                </div>
+              )}
 
               <button
                 onClick={handleDownloadAlbum}

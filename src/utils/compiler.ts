@@ -1653,6 +1653,7 @@ export function compileAlbumHTML(images: ImageItem[], config: AlbumConfig): stri
     setAutoplayInterval(${config.autoplayInterval || 5});
     setPlayMode(autoplayEnabled, false);
   </script>
+  <script id="album-raw-data" type="application/json">${JSON.stringify({ images, config })}</script>
 </body>
 </html>`;
 

@@ -115,5 +115,22 @@ export function generateSampleAlbum(): SavedAlbum {
       photosPerPage: 4,
     },
     coverImage: images[0].compressedBase64,
+    likes: 24,
+    views: 142,
+    isPrivate: false,
+    comments: [
+      {
+        id: 'c1',
+        name: 'Ahmad Fauzi',
+        message: 'MasyaAllah pemandangannya indah sekali, serasi dan bikin adem!',
+        createdAt: Date.now() - 1000 * 60 * 60 * 5,
+      },
+      {
+        id: 'c2',
+        name: 'Siti Rahma',
+        message: 'Kenangan yang manis banget, ditunggu petualangan berikutnya!',
+        createdAt: Date.now() - 1000 * 60 * 60 * 2,
+      }
+    ]
   };
 }

@@ -13,6 +13,13 @@ export interface ImageItem {
 export type AlbumTheme = 'modern' | 'vintage' | 'dark' | 'aesthetic';
 export type AlbumTransition = 'slide' | 'fade' | 'stack';
 
+export interface AlbumComment {
+  id: string;
+  name: string;
+  message: string;
+  createdAt: number;
+}
+
 export interface AlbumConfig {
   title: string;
   subtitle: string;
@@ -23,6 +30,7 @@ export interface AlbumConfig {
   autoplay?: boolean;
   autoplayInterval?: number; // seconds
   photosPerPage?: number; // 1, 2, 3, or 4
+  isPrivate?: boolean;
 }
 
 export interface SavedAlbum {
@@ -37,5 +45,9 @@ export interface SavedAlbum {
   shareUrl?: string;
   htmlSize?: number;
   totalPhotos?: number;
+  likes?: number;
+  views?: number;
+  comments?: AlbumComment[];
+  isPrivate?: boolean;
 }
 
